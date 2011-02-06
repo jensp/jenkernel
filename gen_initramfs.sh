@@ -711,7 +711,7 @@ create_initramfs() {
                 if `grep -q '^CONFIG_RD_XZ=y' ${KERNEL_DIR}/.config` && test -f /usr/bin/xz
                 then
                         print_info 1 "using xz..." True False
-                        /usr/bin/xz -z -f -9 ${CPIO}
+                        /usr/bin/xz -e --check=none -z -f -9 ${CPIO}
                         mv "${CPIO}.xz" "${CPIO%%.cpio}"
 		elif `grep -q '^CONFIG_RD_LZMA=y' ${KERNEL_DIR}/.config` && test -f /usr/bin/lzma
 		then
