@@ -707,8 +707,13 @@ create_initramfs() {
 		echo -e "CONFIG_INITRAMFS_SOURCE=\"${CPIO}\"\nCONFIG_INITRAMFS_ROOT_UID=0\nCONFIG_INITRAMFS_ROOT_GID=0" >> ${KERNEL_DIR}/.config 
 	else
 		# compress using the best way
-		print_info 1 "        >> compressing the initrd " False
-		if `grep -q '^CONFIG_RD_LZMA=y' ${KERNEL_DIR}/.config` && test -f /usr/bin/lzma
+		print_info 1 "        >> compressing the initrd " FalsA
+                if `grep -q '^CONFIG_RD_XZ=y' ${KERNEL_DIR}/.config` && test -f /usr/bin/xz
+                then
+                        print_info 1 "using xz..." True False
+                        /usr/bin/xz -z -f -9 ${CPIO}
+                        mv "${CPIO}.xz" "${CPIO%%.cpio}"
+		elif `grep -q '^CONFIG_RD_LZMA=y' ${KERNEL_DIR}/.config` && test -f /usr/bin/lzma
 		then
 			print_info 1 "using lzma..." True False
 			/usr/bin/lzma -z -f -9 ${CPIO}
@@ -718,11 +723,6 @@ create_initramfs() {
 			print_info 1 "using bzip2..." True False
 			/bin/bzip2 -z -f -9 ${CPIO}
 			mv "${CPIO}.bz2" "${CPIO%%.cpio}"
-		elif `grep -q '^CONFIG_RD_XZ=y' ${KERNEL_DIR}/.config` && test -f /usr/bin/xz
-		then
-			print_info 1 "using xz..." True False
-			/usr/bin/xz -z -f -9 ${CPIO}
-			mv "${CPIO}.xz" "${CPIO%%.cpio}"
 		elif test -f /bin/gzip
 		then
 			print_info 1 "using gzip..." True False
