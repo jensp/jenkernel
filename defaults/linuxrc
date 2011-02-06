@@ -24,7 +24,7 @@ if [ "$TERM" = "linux" ]; then
     echo -en "\e]PEa1cdcd" #cyan
     echo -en "\e]P7ffffff" #lightgrey
     echo -en "\e]PFdedede" #white
-    echo -en "\f" # clear screen
+    echo -en "\e[2J" # clear screen
 fi
 
 [ -e /etc/initrd.splash ] && . /etc/initrd.splash
