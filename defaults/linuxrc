@@ -303,7 +303,7 @@ setup_btrfsctl
 setup_md_device
 
 # Scan volumes
-startVolumes
+#startVolumes
 
 setup_keymap
 
