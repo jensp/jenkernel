@@ -1,11 +1,11 @@
 # Module groups for genkernel initramfs auto-loading
 
 # RAID
-MODULES_ATARAID="ataraid pdcraid hptraid"
+MODULES_ATARAID=""
 MODULES_DMRAID="dm-mod dm-mirror"
-MODULES_EVMS="dm-mod dm-snapshot dm-mirror dm-bbr raid0 raid1 raid456 raid5 raid6 raid10"
+MODULES_EVMS=""
 MODULES_LVM="dm-mod dm-snapshot dm-mirror dm-bbr"
-MODULES_MDADM="dm-mod dm-snapshot dm-mirror dm-bbr raid0 raid1 raid456 raid5 raid6 raid10"
+MODULES_MDADM=""
 
 # Hardware (IDE/SCSI/SATA)
 MODULES_PATA="pata_mpiix pata_pdc2027x pata_radisys pata_sil680 pata_rz1000 pata_efar pata_cmd64x pata_hpt366 pata_hpt37x pata_hpt3x3 pata_hpt3x2n pata_optidma pata_it821x pata_artop pata_oldpiix pata_cypress pata_platform pata_serverworks pata_legacy pata_ns87410 pata_ns87415 pata_pcmcia pata_isapnp pata_it8213 pata_ali pata_amd pata_opti pata_atiixp pata_triflex pata_pdc202xx_old pata_sc1200 pata_qdi pata_netcell pata_sis pata_hpt3x2n pata_marvell pata_jmicron pata_via pata_cs5520 pata_cs5530 pata_cs5535 pata_sl82c105 libata"
@@ -14,16 +14,16 @@ MODULES_SCSI="sd_mod sg sr_mod aic79xx aic7xxx aic7xxx_old arcmsr BusLogic ncr53
 MODULES_WAITSCAN="scsi_wait_scan"
 
 # Hardware (Network)
-MODULES_NET="e1000 tg3"
+MODULES_NET=""
 
 # iSCSI support
 MODULES_ISCSI="scsi_transport_iscsi libiscsi iscsi_tcp"
 
 # Hardware (Pluggable)
-MODULES_FIREWIRE="ieee1394 ohci1394 sbp2"
-MODULES_PCMCIA="pcmcia pcmcia_core yenta_socket pd6729 i82092 i82365 tcic ds ide-cs firmware_class"
-MODULES_USB="ehci-hcd uhci usb-ohci hid usb-storage uhci-hcd ohci-hcd usbhid sl811-hcd"
+MODULES_FIREWIRE=""
+MODULES_PCMCIA=""
+MODULES_USB="ehci-hcd uhci usb-ohci usb-storage uhci-hcd ohci-hcd"
 
 # Filesystems
-MODULES_FS="ext2 ext3 ext4 btrfs reiserfs jfs nfs xfs fuse"
+MODULES_FS="ext4"
 
