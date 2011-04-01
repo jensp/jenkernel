@@ -130,7 +130,7 @@ KERNEL COMPILATION
     to the second most recently built image, if one exists.  Similar
     symlinks (both * and *.old) are managed for initramfs and System.map.
     The corresponding work products (i.e., the actual kernel
-    and initamfs images, and System.map) are also managed accordingly.
+    and initramfs images, and System.map) are also managed accordingly.
     NOTE: Specifying   *--symlink*  does nothing unless
     *--install* is also specified.
 
@@ -246,11 +246,16 @@ INITIALIZATION
     exist.
 
 *--mdadm*::
-    Copy '/etc/mdadm.conf' and mdadm/mdmon binaries to initramfs.
+    Include mdadm/mdmon support.
     Without sys-fs/mdadm[static] installed, this will compile mdadm for you.
 
+*--mdadm-config*=<file>::
+    Use <file> as configfile for MDADM.
+    By default the ramdisk will be built *without* an mdadm.conf and
+    will auto-detect arrays during boot-up.
+
 *--dmraid*::
-    Add DMRAID support.
+    Include DMRAID support.
 
 *--multipath*::
     Include Multipath support
