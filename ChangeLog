@@ -5,6 +5,66 @@
 # Distributed under the GPL v2
 # $Id$
 
+  07 Jun 2011; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.16
+
+  07 Jun 2011; Sebastian Pipping <sping@gentoo.org> doc/genkernel.8.txt:
+  Document most undocumented boot parameters (bug #370369)
+
+  07 Jun 2011; Sebastian Pipping <sping@gentoo.org> doc/genkernel.8.txt:
+  Docs: Fix mixup of boot parameters real_init= and init_opts=
+
+  04 Jun 2011; Sebastian Pipping <sping@gentoo.org> genkernel.conf,
+  maintenance/docmatcher.py:
+  Document remaining options inside genkiernel.conf (bug #367233)
+
+  01 Jun 2011; Sebastian Pipping <sping@gentoo.org> defaults/linuxrc,
+  doc/genkernel.8.txt:
+  Document option lvmraid= and make it imply dolvm (bug #153502)
+
+  31 May 2011; Sebastian Pipping <sping@gentoo.org> defaults/linuxrc,
+  doc/genkernel.8.txt:
+  Add rootfstype= boot parameter (bug #221245)
+
+  Special thanks:
+  - Marcin Kurek
+
+  31 May 2011; Nelson Batalha <nelson.batalha@gmail.com> defaults/initrd.defaults:
+  Add Kernel 3.0.0 support (bug #369481)
+
+  31 May 2011; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Output warning in warning color
+
+  31 May 2011; Sebastian Pipping <sping@gentoo.org> doc/genkernel.8.txt,
+  genkernel:
+  Document boot parameter domdadm (bug #369415)
+
+  12 May 2011; Amadeusz Żołnowski <aidecoe@aidecoe.name>
+  defaults/modules_load:
+  Added hpsa to defaults/modules_load; fixes bug #363369
+
+  28 Mar 2011; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump to 3.4.15
+
+  24 Mar 2011; Peter Hjalmarsson <xake@rymdraket.net> defaults/linuxrc, initrd.scripts:
+  Rescue /proc and /sys over into chroot
+  Apply mount options noexec,nosuid,nodev to /proc and /sys
+
+  22 Mar 2011; Fabio Erculiani <lxnay@sabayon.org> gen_compile.sh, patches/iscsi/*:
+  Fix compilation of iSCSI
+
+  23 Mar 2011; Peter Hjalmarsson <xake@rymdraket.net> doc/genkernel.8.txt,
+  gen_cmdline.sh, gen_initramfs.sh:
+  Remove "--slowusb" as it is enabled by default now. Also document "noslowusb"
+  ramdisk option that skips it.
+
+  22 Mar 2011; Peter Hjalmarsson <xake@rymdraket.net> defaults/initrd.defaults,
+  defaults/initrd.scripts:
+  Set DO_slowusb as default, and make setup_slowusb unset it if it cannot find
+  a usb-storage attached. This makes genkernel ramdisk adhere to "noslowusb",
+  makes the ramdisk only wait if there is a usb-storage attached and should fix
+  gentoo bug #359619.
+
   16 Mar 2011; Sebastian Pipping <sping@gentoo.org> genkernel:
   Bump version to 3.4.14
 

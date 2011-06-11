@@ -263,9 +263,6 @@ INITIALIZATION
 *--iscsi*::
     Include iSCSI support
 
-*--slowusb*::
-    Enables extra pauses for slow USB CD boots.
-
 *--bootloader*=*grub*::
     Add new kernel to GRUB configuration.
 
@@ -345,7 +342,7 @@ OUTPUT SETTINGS
 
 *--initramfs-overlay*=<dir>::
     Directory structure to include in the initramfs, only available
-    on 2.6 kernels
+    on >=2.6 kernels
 
 *--firmware*::
     Enable copying of firmware into initramfs.
@@ -397,13 +394,16 @@ which the ramdisk scripts would recognize.
     software,  and in case your encrypted device isn't open with the
     key, it opens a shell in the initrd quietly.
 
-*dodmraid*=<...>::
-    Passes arguments to dmraid on bootup.
+*dodmraid*[=<...>]::
+    Activate Device-Mapper RAID and (optionally) pass arguments to it.
 
 *real_init*=<...>::
+    Override location of init script, default is "/sbin/init".
+
+*init_opts*=<...>::
     Passes arguments to init on bootup.
 
-*scandelay*=<...>::
+*scandelay*[=<...>]::
     Pauses for 10 seconds before running devfsd if no argument is
     specified; otherwise pauses for the number of specified seconds.
 
@@ -423,9 +423,21 @@ which the ramdisk scripts would recognize.
 *dolvm*::
     Activate LVM volumes on bootup
 
+*lvmraid*=<...>::
+    Specify RAID devices to set up before the activation of LVM volumes.
+    Implies option *dolvm*.
+
+*domdadm*::
+    Scan for RAID arrays on bootup
+
 *doscsi*::
     Activate SCSI devices on bootup, necessary when SCSI support is
     compiled as modules and you're using SCSI or SATA devices.
+
+*noslowusb*::
+    By default genkernel pause for 10 seconds if it finds a attached
+    usb-storage device to give them time to initiate.
+    This option skips that pause.
 
 *keymap*='MAP'::
     Set keymap to 'MAP', e.g. *keymap*=de.
@@ -434,6 +446,89 @@ which the ramdisk scripts would recognize.
 
 *dokeymap*::
     Use keymap.  Usage of *keymap*= implies this option, already.
+
+*rootfstype*=<...>::
+    Specify the file system type to mount the real root filesystem as.
+    This can be useful when support for ext2/ext3/ext4 are
+    in competition.  Default is "auto".
+
+*docache*::
+*nocache*::
+    Enables/disables caching of CD contents in RAM.
+
+*root*=<...>::
+    Omit or specify as "/dev/ram0".
+    For other values be sure to know what you're doing.
+
+*subdir*=<...>::
+    switch_root into "<CHROOT>/<SUBDIR>" instead of "<CHROOT>/".
+    <CHROOT> is "/newroot" (or "/union") usually.
+
+*debug*::
+    Drop into a debug shell early in the process.
+
+*noload*=<...>::
+    List of modules to skip loading.
+    Separate using commas or spaces.
+
+*nodetect*::
+    Skipping scanning modules using "modprobe <MODULE> -n".
+    Use *doload=* for specifying a whitelist of exceptions.
+
+*doload*=<...>::
+    List of modules to load despite *nodetect*.
+
+*domodules*::
+*nomodules*::
+    Enables/disables loading of modules in general.
+
+*CONSOLE*=<...>::
+*console*=<...>::
+    Override location of console, default is "/dev/console".
+
+*part*=<...>::
+    Specify part for mdadm to start.  This is the relevant code in mdstart:
+------------------------------------------
+    fd = open("/dev/md<MD_NUMBER>", 0, 0);
+    ioctl(fd, RAID_AUTORUN, <MDPART>);
+------------------------------------------
+
+*iscsi_initiatorname*=<...>::
+*iscsi_target*=<...>::
+*iscsi_tgpt*=<...>::
+*iscsi_address*=<...>::
+*iscsi_port*=<...>::
+*iscsi_username*=<...>::
+*iscsi_password*=<...>::
+*iscsi_username_in*=<...>::
+*iscsi_password_in*=<...>::
+*iscsi_debug*=<...>::
+*iscsi_noibft*::
+    Specify iSCSI parameters.
+
+*unionfs*::
+*nounionfs*::
+    Enables/disables UnionFS.
+
+*real_rootflags*=<...>::
+    Additional flags to mount the real root system with.
+    For example *real_rootflags*=noatime would make "-o ro,noatime".
+
+*real_resume*=<...>::
+*resume*=<...>::
+*noresume*::
+    TO BE DOCUMENTED
+
+*cdroot*[=<...>]::
+*cdroot_type*=<...>::
+    TO BE DOCUMENTED
+
+*loop*=<...>::
+*looptype*=<...>::
+    TO BE DOCUMENTED
+
+*isoboot*=<...>::
+    TO BE DOCUMENTED
 
 
 NETBOOTING
