@@ -80,6 +80,10 @@ export_utils_args()
 	then
 		export AS="${UTILS_AS}"
 	fi
+	if [ "${UTILS_CROSS_COMPILE}" != '' ]
+	then
+		export CROSS_COMPILE="${UTILS_CROSS_COMPILE}"
+	fi
 }
 
 unset_utils_args()
@@ -99,6 +103,10 @@ unset_utils_args()
 	if [ "${UTILS_AS}" != '' ]
 	then
 		unset AS
+	fi
+	if [ "${UTILS_CROSS_COMPILE}" != '' ]
+	then
+		unset CROSS_COMPILE
 	fi
 	reset_args
 }
@@ -231,27 +239,30 @@ compile_generic() {
 	local target=${1}
 	local argstype=${2}
 
-	if [ "${argstype}" = 'kernel' ] || [ "${argstype}" = 'runtask' ]
-	then
-		export_kernel_args
-		MAKE=${KERNEL_MAKE}
-	elif [ "${2}" = 'utils' ]
-	then
-		export_utils_args
-		MAKE=${UTILS_MAKE}
-	fi
 	case "${argstype}" in
-		kernel) ARGS="`compile_kernel_args`" ;;
+		kernel|kernelruntask)
+			export_kernel_args
+			MAKE=${KERNEL_MAKE}
+			;;
+		utils)
+			export_utils_args
+			MAKE=${UTILS_MAKE}
+			;;
+	esac
+
+	case "${argstype}" in
+		kernel|kernelruntask) ARGS="`compile_kernel_args`" ;;
 		utils) ARGS="`compile_utils_args`" ;;
-		*) ARGS="" ;; # includes runtask
+		*) ARGS="" ;;
 	esac
 	shift 2
 
 	# the eval usage is needed in the next set of code
 	# as ARGS can contain spaces and quotes, eg:
 	# ARGS='CC="ccache gcc"'
-	if [ "${argstype}" == 'runtask' ]
+	if [ "${argstype}" == 'kernelruntask' ]
 	then
+		# Silent operation, forced -j1
 		print_info 2 "COMMAND: ${MAKE} ${MAKEOPTS} -j1 ${ARGS} ${target} $*" 1 0 1
 		eval ${MAKE} -s ${MAKEOPTS} -j1 "${ARGS}" ${target} $*
 		RET=$?
@@ -272,13 +283,11 @@ compile_generic() {
 
 	unset MAKE
 	unset ARGS
-	if [ "${argstype}" = 'kernel' ]
-	then
-		unset_kernel_args
-	elif [ "${argstype}" = 'utils' ]
-	then
-		unset_utils_args
-	fi
+
+	case "${argstype}" in
+		kernel) unset_kernel_args ;;
+		utils) unset_utils_args ;;
+	esac
 }
 
 compile_modules() {
@@ -287,7 +296,7 @@ compile_modules() {
 	compile_generic modules kernel
 	export UNAME_MACHINE="${ARCH}"
 	[ "${INSTALL_MOD_PATH}" != '' ] && export INSTALL_MOD_PATH
-	compile_generic "modules_install" kernel
+	MAKEOPTS="${MAKEOPTS} -j1" compile_generic "modules_install" kernel
 	unset UNAME_MACHINE
 }
 
@@ -295,8 +304,12 @@ compile_kernel() {
 	[ "${KERNEL_MAKE}" = '' ] &&
 		gen_die "KERNEL_MAKE undefined - I don't know how to compile a kernel for this arch!"
 	cd ${KERNEL_DIR}
-	print_info 1 "        >> Compiling ${KV} ${KERNEL_MAKE_DIRECTIVE/_install/ [ install ]/}..."
-	compile_generic "${KERNEL_MAKE_DIRECTIVE}" kernel
+	local kernel_make_directive="${KERNEL_MAKE_DIRECTIVE}"
+	if [ "${KERNEL_MAKE_DIRECTIVE_OVERRIDE}" != "${DEFAULT_KERNEL_MAKE_DIRECTIVE_OVERRIDE}" ]; then
+		kernel_make_directive="${KERNEL_MAKE_DIRECTIVE_OVERRIDE}"
+	fi
+	print_info 1 "        >> Compiling ${KV} ${kernel_make_directive/_install/ [ install ]/}..."
+	compile_generic "${kernel_make_directive}" kernel
 	if [ "${KERNEL_MAKE_DIRECTIVE_2}" != '' ]
 	then
 		print_info 1 "        >> Starting supplimental compile of ${KV}: ${KERNEL_MAKE_DIRECTIVE_2}..."
@@ -307,19 +320,19 @@ compile_kernel() {
 	if [ -n "${firmware_in_kernel_line}" -a "${firmware_in_kernel_line}" != CONFIG_FIRMWARE_IN_KERNEL=y ]
 	then
 		print_info 1 "        >> Installing firmware ('make firmware_install') due to CONFIG_FIRMWARE_IN_KERNEL != y..."
-		compile_generic "firmware_install" kernel
+		MAKEOPTS="${MAKEOPTS} -j1" compile_generic "firmware_install" kernel
 	else
 		print_info 1 "        >> Not installing firmware as it's included in the kernel already (CONFIG_FIRMWARE_IN_KERNEL=y)..."
 	fi
 
-	local tmp_kernel_binary=$(find_kernel_binary ${KERNEL_BINARY})
+	local tmp_kernel_binary=$(find_kernel_binary ${KERNEL_BINARY_OVERRIDE:-${KERNEL_BINARY}})
 	local tmp_kernel_binary2=$(find_kernel_binary ${KERNEL_BINARY_2})
 	if [ -z "${tmp_kernel_binary}" ]
 	then
 		gen_die "Cannot locate kernel binary"
 	fi
 
-	if ! isTrue "${CMD_NOINSTALL}"
+	if isTrue "${CMD_INSTALL}"
 	then
 		copy_image_with_preserve "kernel" \
 			"${tmp_kernel_binary}" \
@@ -393,7 +406,7 @@ compile_busybox() {
 		/bin/tar -jxpf ${BUSYBOX_SRCTAR} ||
 			gen_die 'Could not extract busybox source tarball!'
 		[ -d "${BUSYBOX_DIR}" ] ||
-			gen_die 'Busybox directory ${BUSYBOX_DIR} is invalid!'
+			gen_die "Busybox directory ${BUSYBOX_DIR} is invalid!"
 		cp "${BUSYBOX_CONFIG}" "${BUSYBOX_DIR}/.config"
 		cp "${BUSYBOX_CONFIG}" "${BUSYBOX_DIR}/.config.gk_orig"
 		cd "${BUSYBOX_DIR}"
@@ -406,7 +419,7 @@ compile_busybox() {
 		print_info 1 'busybox: >> Copying to cache...'
 		[ -f "${TEMP}/${BUSYBOX_DIR}/busybox" ] ||
 			gen_die 'Busybox executable does not exist!'
-		strip "${TEMP}/${BUSYBOX_DIR}/busybox" ||
+		${UTILS_CROSS_COMPILE}strip "${TEMP}/${BUSYBOX_DIR}/busybox" ||
 			gen_die 'Could not strip busybox binary!'
 		tar -cj -C "${TEMP}/${BUSYBOX_DIR}" -f "${BUSYBOX_BINCACHE}" busybox .config .config.gk_orig ||
 			gen_die 'Could not create the busybox bincache!'
@@ -428,29 +441,33 @@ compile_lvm() {
 		/bin/tar -zxpf ${LVM_SRCTAR} ||
 			gen_die 'Could not extract LVM source tarball!'
 		[ -d "${LVM_DIR}" ] ||
-			gen_die 'LVM directory ${LVM_DIR} is invalid!'
+			gen_die "LVM directory ${LVM_DIR} is invalid!"
 		cd "${LVM_DIR}"
 		apply_patches lvm ${LVM_VER}
 		print_info 1 'lvm: >> Configuring...'
 			CFLAGS="-fPIC" \
-			./configure --enable-static_link --prefix=${TEMP}/lvm \
+			./configure --enable-static_link --prefix=/ \
 				--with-lvm1=internal --with-clvmd=none --with-cluster=none \
 				--disable-readline --disable-selinux --with-mirrors=internal \
-				--with-snapshots=internal --with-pool=internal >> ${LOGFILE} 2>&1 || \
+				--with-snapshots=internal --with-pool=internal \
+				>> ${LOGFILE} 2>&1 || \
 				gen_die 'Configure of lvm failed!'
 		print_info 1 'lvm: >> Compiling...'
-			compile_generic '' utils
-			compile_generic 'install' utils
+		compile_generic '' utils
+		compile_generic "install DESTDIR=${TEMP}/lvm/" utils
 
 		cd "${TEMP}/lvm"
 		print_info 1 '      >> Copying to bincache...'
-		strip "sbin/lvm.static" ||
+		${UTILS_CROSS_COMPILE}strip "sbin/lvm.static" ||
 			gen_die 'Could not strip lvm.static!'
-		/bin/tar -cjf "${LVM_BINCACHE}" sbin/lvm.static ||
+		# See bug 382555
+		${UTILS_CROSS_COMPILE}strip "sbin/dmsetup.static" ||
+			gen_die 'Could not strip dmsetup.static'
+		/bin/tar -cjf "${LVM_BINCACHE}" . ||
 			gen_die 'Could not create binary cache'
 
 		cd "${TEMP}"
-		rm -rf "${TEMP}/device-mapper" > /dev/null
+		rm -rf "${TEMP}/lvm" > /dev/null
 		rm -rf "${LVM_DIR}" lvm
 	fi
 }
@@ -467,9 +484,10 @@ compile_mdadm() {
 		/bin/tar -jxpf "${MDADM_SRCTAR}" ||
 			gen_die 'Could not extract MDADM source tarball!'
 		[ -d "${MDADM_DIR}" ] ||
-			gen_die 'MDADM directory ${MDADM_DIR} is invalid!'
+			gen_die "MDADM directory ${MDADM_DIR} is invalid!"
 
 		cd "${MDADM_DIR}"
+		apply_patches mdadm ${MDADM_VER}
 		sed -i "/^CFLAGS = /s:^CFLAGS = \(.*\)$:CFLAGS = -Os:" Makefile
 		sed -i "/^CXFLAGS = /s:^CXFLAGS = \(.*\)$:CXFLAGS = -Os:" Makefile
 		sed -i "/^CWFLAGS = /s:^CWFLAGS = \(.*\)$:CWFLAGS = -Wall:" Makefile
@@ -483,7 +501,7 @@ compile_mdadm() {
 		install -m 0755 -s mdmon "${TEMP}/mdadm/sbin/mdmon"
 		print_info 1 '      >> Copying to bincache...'
 		cd "${TEMP}/mdadm"
-		strip "sbin/mdadm" "sbin/mdmon" ||
+		${UTILS_CROSS_COMPILE}strip "sbin/mdadm" "sbin/mdmon" ||
 			gen_die 'Could not strip mdadm binaries!'
 		/bin/tar -cjf "${MDADM_BINCACHE}" sbin/mdadm sbin/mdmon ||
 			gen_die 'Could not create binary cache'
@@ -504,28 +522,31 @@ compile_dmraid() {
 		/bin/tar -jxpf ${DMRAID_SRCTAR} ||
 			gen_die 'Could not extract DMRAID source tarball!'
 		[ -d "${DMRAID_DIR}" ] ||
-			gen_die 'DMRAID directory ${DMRAID_DIR} is invalid!'
-		rm -rf "${TEMP}/device-mapper" > /dev/null
-		/bin/tar -jxpf "${DEVICE_MAPPER_BINCACHE}" -C "${TEMP}" ||
-			gen_die "Could not extract device-mapper binary cache!";
-		
+			gen_die "DMRAID directory ${DMRAID_DIR} is invalid!"
+		rm -rf "${TEMP}/lvm" > /dev/null
+		mkdir -p "${TEMP}/lvm"
+		/bin/tar -jxpf "${LVM_BINCACHE}" -C "${TEMP}/lvm" ||
+			gen_die "Could not extract LVM2 binary cache!";
+
 		cd "${DMRAID_DIR}"
+		apply_patches dmraid ${DMRAID_VER}
 		print_info 1 'dmraid: >> Configuring...'
-		
-		LDFLAGS="-L${TEMP}/device-mapper/lib" \
-		CFLAGS="-I${TEMP}/device-mapper/include" \
-		CPPFLAGS="-I${TEMP}/device-mapper/include" \
+
+		LDFLAGS="-L${TEMP}/lvm/lib" \
+		CFLAGS="-I${TEMP}/lvm/include" \
+		CPPFLAGS="-I${TEMP}/lvm/include" \
+		LIBS="-ldevmapper" \
 		./configure --enable-static_link --prefix=${TEMP}/dmraid >> ${LOGFILE} 2>&1 ||
 			gen_die 'Configure of dmraid failed!'
 
 		# We dont necessarily have selinux installed yet... look into
 		# selinux global support in the future.
-		sed -i tools/Makefile -e "s|DMRAIDLIBS += -lselinux||g"
+		sed -i tools/Makefile -e "/DMRAID_LIBS +=/s|-lselinux||g"
 		###echo "DMRAIDLIBS += -lselinux -lsepol" >> tools/Makefile
 		mkdir -p "${TEMP}/dmraid"
 		print_info 1 'dmraid: >> Compiling...'
 		# Force dmraid to be built with -j1 for bug #188273
-		MAKEOPTS=-j1 compile_generic '' utils
+		MAKEOPTS="${MAKEOPTS} -j1" compile_generic '' utils
 		#compile_generic 'install' utils
 		mkdir ${TEMP}/dmraid/sbin
 		install -m 0755 -s tools/dmraid "${TEMP}/dmraid/sbin/dmraid"
@@ -535,43 +556,13 @@ compile_dmraid() {
 			gen_die 'Could not create binary cache'
 
 		cd "${TEMP}"
-		rm -rf "${TEMP}/device-mapper" > /dev/null
+		rm -rf "${TEMP}/lvm" > /dev/null
 		rm -rf "${DMRAID_DIR}" dmraid
 	fi
 }
 
 compile_device_mapper() {
-	if [ ! -f "${DEVICE_MAPPER_BINCACHE}" ]
-	then
-		[ ! -f "${DEVICE_MAPPER_SRCTAR}" ] &&
-			gen_die "Could not find device-mapper source tarball: ${DEVICE_MAPPER_SRCTAR}. Please place it there, or place another version, changing /etc/genkernel.conf as necessary!"
-		cd "${TEMP}"
-		rm -rf "${DEVICE_MAPPER_DIR}"
-		/bin/tar -zxpf "${DEVICE_MAPPER_SRCTAR}"
-		[ ! -d "${DEVICE_MAPPER_DIR}" ] &&
-			gen_die "device-mapper directory ${DEVICE_MAPPER_DIR} invalid"
-		cd "${DEVICE_MAPPER_DIR}"
-		CFLAGS="-fPIC" \
-		./configure --prefix=${TEMP}/device-mapper --enable-static_link \
-			--disable-selinux >> ${LOGFILE} 2>&1 ||
-			gen_die 'Configuring device-mapper failed!'
-		print_info 1 'device-mapper: >> Compiling...'
-		compile_generic '' utils
-		compile_generic 'install' utils
-		print_info 1 '        >> Copying to cache...'
-		cd "${TEMP}"
-		rm -rf "${TEMP}/device-mapper/man" ||
-			gen_die 'Could not remove manual pages!'
-		strip "${TEMP}/device-mapper/sbin/dmsetup" ||
-			gen_die 'Could not strip dmsetup binary!'
-		/bin/tar -jcpf "${DEVICE_MAPPER_BINCACHE}" device-mapper ||
-			gen_die 'Could not tar up the device-mapper binary!'
-		[ -f "${DEVICE_MAPPER_BINCACHE}" ] ||
-			gen_die 'device-mapper cache not created!'
-		cd "${TEMP}"
-		rm -rf "${DEVICE_MAPPER_DIR}" > /dev/null
-		rm -rf "${TEMP}/device-mapper" > /dev/null
-	fi
+	compile_lvm
 }
 
 compile_e2fsprogs() {
@@ -587,15 +578,16 @@ compile_e2fsprogs() {
 		[ ! -d "${E2FSPROGS_DIR}" ] &&
 			gen_die "e2fsprogs directory ${E2FSPROGS_DIR} invalid"
 		cd "${E2FSPROGS_DIR}"
+		apply_patches e2fsprogs ${E2FSPROGS_VER}
 		print_info 1 'e2fsprogs: >> Configuring...'
 		LDFLAGS=-static ./configure >> ${LOGFILE} 2>&1 ||
 			gen_die 'Configuring e2fsprogs failed!'
 		print_info 1 'e2fsprogs: >> Compiling...'
-		MAKE=${UTILS_MAKE} compile_generic "" ""
+		MAKE=${UTILS_MAKE} MAKEOPTS="${MAKEOPTS} -j1" compile_generic "" ""
 		print_info 1 'blkid: >> Copying to cache...'
 		[ -f "${TEMP}/${E2FSPROGS_DIR}/misc/blkid" ] ||
 			gen_die 'Blkid executable does not exist!'
-		strip "${TEMP}/${E2FSPROGS_DIR}/misc/blkid" ||
+		${UTILS_CROSS_COMPILE}strip "${TEMP}/${E2FSPROGS_DIR}/misc/blkid" ||
 			gen_die 'Could not strip blkid binary!'
 		bzip2 "${TEMP}/${E2FSPROGS_DIR}/misc/blkid" ||
 			gen_die 'bzip2 compression of blkid failed!'
@@ -618,6 +610,7 @@ compile_fuse() {
 		[ ! -d "${FUSE_DIR}" ] &&
 			gen_die "fuse directory ${FUSE_DIR} invalid"
 		cd "${FUSE_DIR}"
+		apply_patches fuse ${FUSE_VER}
 		print_info 1 'fuse: >> Configuring...'
 		./configure  --disable-kernel-module --disable-example >> ${LOGFILE} 2>&1 ||
 			gen_die 'Configuring fuse failed!'
@@ -628,7 +621,7 @@ compile_fuse() {
 #		print_info 1 'libfuse: >> Copying to cache...'
 #		[ -f "${TEMP}/${FUSE_DIR}/lib/.libs/libfuse.so" ] ||
 #			gen_die 'libfuse.so does not exist!'
-#		strip "${TEMP}/${FUSE_DIR}/lib/.libs/libfuse.so" ||
+#		${UTILS_CROSS_COMPILE}strip "${TEMP}/${FUSE_DIR}/lib/.libs/libfuse.so" ||
 #			gen_die 'Could not strip libfuse.so!'
 #		cd "${TEMP}/${FUSE_DIR}/lib/.libs"
 #		tar -cjf "${FUSE_BINCACHE}" libfuse*so* ||
@@ -654,6 +647,7 @@ compile_unionfs_fuse() {
 		[ ! -d "${UNIONFS_FUSE_DIR}" ] &&
 			gen_die "unionfs-fuse directory ${UNIONFS_FUSE_DIR} invalid"
 		cd "${UNIONFS_FUSE_DIR}"
+		apply_patches unionfs-fuse ${UNIONFS_FUSE_VER}
 		print_info 1 'unionfs-fuse: >> Compiling...'
 		sed -i "/^\(CFLAGS\|CPPFLAGS\)/s:^\\(.*\\)$:\\1 -static -I${TEMP}/${FUSE_DIR}/include -L${TEMP}/${FUSE_DIR}/lib/.libs:" Makefile src/Makefile
 		sed -i "/^LIB = /s:^LIB = \(.*\)$:LIB = -static -L${TEMP}/${FUSE_DIR}/lib/.libs \1 -ldl -lrt:" Makefile src/Makefile
@@ -661,7 +655,7 @@ compile_unionfs_fuse() {
 		print_info 1 'unionfs-fuse: >> Copying to cache...'
 		[ -f "${TEMP}/${UNIONFS_FUSE_DIR}/src/unionfs" ] ||
 			gen_die 'unionfs binary does not exist!'
-		strip "${TEMP}/${UNIONFS_FUSE_DIR}/src/unionfs" ||
+		${UTILS_CROSS_COMPILE}strip "${TEMP}/${UNIONFS_FUSE_DIR}/src/unionfs" ||
 			gen_die 'Could not strip unionfs binary!'
 		bzip2 "${TEMP}/${UNIONFS_FUSE_DIR}/src/unionfs" ||
 			gen_die 'bzip2 compression of unionfs binary failed!'
@@ -711,7 +705,7 @@ compile_iscsi() {
 		print_info 1 'iscsistart: >> Copying to cache...'
 		[ -f "${TEMP}/${ISCSI_DIR}/usr/iscsistart" ] ||
 			gen_die 'iscsistart executable does not exist!'
-		strip "${TEMP}/${ISCSI_DIR}/usr/iscsistart" ||
+		${UTILS_CROSS_COMPILE}strip "${TEMP}/${ISCSI_DIR}/usr/iscsistart" ||
 			gen_die 'Could not strip iscsistart binary!'
 		bzip2 "${TEMP}/${ISCSI_DIR}/usr/iscsistart" ||
 			gen_die 'bzip2 compression of iscsistart failed!'
@@ -736,6 +730,7 @@ compile_gpg() {
 		[ ! -d "${GPG_DIR}" ] &&
 			gen_die "gnupg directory ${GPG_DIR} invalid"
 		cd "${GPG_DIR}"
+		apply_patches gnupg ${GPG_VER}
 		print_info 1 'gnupg: >> Configuring...'
 		# --enable-minimal works, but it doesn't reduce the command length much.
 		# Given its history and the precision this needs, explicit is cleaner.
@@ -757,7 +752,7 @@ compile_gpg() {
 		print_info 1 'gnupg: >> Copying to cache...'
 		[ -f "${TEMP}/${GPG_DIR}/g10/gpg" ] ||
 			gen_die 'gnupg executable does not exist!'
-		strip "${TEMP}/${GPG_DIR}/g10/gpg" ||
+		${UTILS_CROSS_COMPILE}strip "${TEMP}/${GPG_DIR}/g10/gpg" ||
 			gen_die 'Could not strip gpg binary!'
 		bzip2 -z -c "${TEMP}/${GPG_DIR}/g10/gpg" > "${GPG_BINCACHE}" ||
 			gen_die 'Could not copy the gpg binary to the package directory, does the directory exist?'

@@ -2,7 +2,7 @@
 # $Id$
 
 get_KV() {
-	if [ "${NO_KERNEL_SOURCES}" = '1' -a -e "${KERNCACHE}" ]
+	if [ "${KERNEL_SOURCES}" = '0' -a -e "${KERNCACHE}" ]
 	then
 		/bin/tar -xj -C ${TEMP} -f ${KERNCACHE} kerncache.config 
 		if [ -e ${TEMP}/kerncache.config ]
@@ -30,7 +30,7 @@ get_KV() {
 		SUB=`grep ^SUBLEVEL\ \= ${KERNEL_DIR}/Makefile | awk '{ print $3 };'`
 		EXV=`grep ^EXTRAVERSION\ \= ${KERNEL_DIR}/Makefile | sed -e "s/EXTRAVERSION =//" -e "s/ //g" -e 's/\$([a-z]*)//gi'`
 
-		if [ -z "${SUB}" ]; 
+		if [ -z "${SUB}" ]
 		then
 			# Handle O= build directories
 			KERNEL_SOURCE_DIR=`grep ^MAKEARGS\ \:\=  ${KERNEL_DIR}/Makefile | awk '{ print $4 };'`
@@ -72,9 +72,11 @@ determine_real_args() {
 	#                               ------------------   ------------             ------------
 	set_config_with_override STRING LOGFILE              CMD_LOGFILE
 	set_config_with_override STRING KERNEL_DIR           CMD_KERNEL_DIR           "${DEFAULT_KERNEL_SOURCE}"
-	set_config_with_override BOOL   NO_KERNEL_SOURCES    CMD_NO_KERNEL_SOURCES
+	set_config_with_override BOOL   KERNEL_SOURCES       CMD_KERNEL_SOURCES       "yes"
 	set_config_with_override STRING KNAME                CMD_KERNNAME             "genkernel"
 
+	set_config_with_override STRING COMPRESS_INITRD      CMD_COMPRESS_INITRD      "$DEFAULT_COMPRESS_INITRD"
+	set_config_with_override STRING COMPRESS_INITRD_TYPE CMD_COMPRESS_INITRD_TYPE "$DEFAULT_COMPRESS_INITRD_TYPE"
 	set_config_with_override STRING MAKEOPTS             CMD_MAKEOPTS             "$DEFAULT_MAKEOPTS"
 	set_config_with_override STRING KERNEL_MAKE          CMD_KERNEL_MAKE          "$DEFAULT_KERNEL_MAKE"
 	set_config_with_override STRING UTILS_MAKE           CMD_UTILS_MAKE           "$DEFAULT_UTILS_MAKE"
@@ -98,8 +100,8 @@ determine_real_args() {
 	set_config_with_override STRING MINKERNPACKAGE       CMD_MINKERNPACKAGE
 	set_config_with_override STRING MODULESPACKAGE       CMD_MODULESPACKAGE
 	set_config_with_override STRING KERNCACHE            CMD_KERNCACHE
-	set_config_with_override BOOL   NORAMDISKMODULES     CMD_NORAMDISKMODULES
-	set_config_with_override BOOL   ALLRAMDISKMODULES    CMD_ALLRAMDISKMODULES
+	set_config_with_override BOOL   RAMDISKMODULES       CMD_RAMDISKMODULES        "yes"
+	set_config_with_override BOOL   ALLRAMDISKMODULES    CMD_ALLRAMDISKMODULES     "no"
 	set_config_with_override STRING INITRAMFS_OVERLAY    CMD_INITRAMFS_OVERLAY
 	set_config_with_override BOOL   MOUNTBOOT            CMD_MOUNTBOOT
 	set_config_with_override BOOL   BUILD_STATIC         CMD_STATIC
@@ -108,7 +110,6 @@ determine_real_args() {
 	set_config_with_override STRING INSTALL_MOD_PATH     CMD_INSTALL_MOD_PATH
 	set_config_with_override BOOL   OLDCONFIG            CMD_OLDCONFIG
 	set_config_with_override BOOL   LVM                  CMD_LVM
-	set_config_with_override BOOL   EVMS                 CMD_EVMS
 	set_config_with_override BOOL   DMRAID               CMD_DMRAID
 	set_config_with_override BOOL   ISCSI                CMD_ISCSI
 	set_config_with_override BOOL   BUSYBOX              CMD_BUSYBOX              "yes"
@@ -120,6 +121,7 @@ determine_real_args() {
 	set_config_with_override BOOL   GPG                  CMD_GPG
 	set_config_with_override BOOL   MDADM                CMD_MDADM
 	set_config_with_override STRING MDADM_CONFIG         CMD_MDADM_CONFIG
+	set_config_with_override BOOL   ZFS                  CMD_ZFS
 	set_config_with_override BOOL   MULTIPATH            CMD_MULTIPATH
 	set_config_with_override BOOL   FIRMWARE             CMD_FIRMWARE
 	set_config_with_override STRING FIRMWARE_DIR         CMD_FIRMWARE_DIR         "/lib/firmware"
@@ -129,13 +131,13 @@ determine_real_args() {
 	set_config_with_override BOOL   KEYMAP               CMD_KEYMAP               "yes"
 	set_config_with_override BOOL   DOKEYMAPAUTO         CMD_DOKEYMAPAUTO
 	set_config_with_override STRING BUSYBOX_CONFIG       CMD_BUSYBOX_CONFIG
+	set_config_with_override BOOL   INSTALL              CMD_INSTALL              "yes"
 
 	BOOTDIR=`arch_replace "${BOOTDIR}"`
 	BOOTDIR=${BOOTDIR%/}    # Remove any trailing slash
 
 	CACHE_DIR=`arch_replace "${CACHE_DIR}"`
 	BUSYBOX_BINCACHE=`cache_replace "${BUSYBOX_BINCACHE}"`
-	DEVICE_MAPPER_BINCACHE=`cache_replace "${DEVICE_MAPPER_BINCACHE}"`
 	LVM_BINCACHE=`cache_replace "${LVM_BINCACHE}"`
 	MDADM_BINCACHE=`cache_replace "${MDADM_BINCACHE}"`
 	DMRAID_BINCACHE=`cache_replace "${DMRAID_BINCACHE}"`
@@ -144,11 +146,10 @@ determine_real_args() {
 	FUSE_BINCACHE=`cache_replace "${FUSE_BINCACHE}"`
 	UNIONFS_FUSE_BINCACHE=`cache_replace "${UNIONFS_FUSE_BINCACHE}"`
 	GPG_BINCACHE=`cache_replace "${GPG_BINCACHE}"`
-  
+
 	DEFAULT_KERNEL_CONFIG=`arch_replace "${DEFAULT_KERNEL_CONFIG}"`
 	BUSYBOX_CONFIG=`arch_replace "${BUSYBOX_CONFIG}"`
 	BUSYBOX_BINCACHE=`arch_replace "${BUSYBOX_BINCACHE}"`
-	DEVICE_MAPPER_BINCACHE=`arch_replace "${DEVICE_MAPPER_BINCACHE}"`
 	LVM_BINCACHE=`arch_replace "${LVM_BINCACHE}"`
 	MDADM_BINCACHE=`arch_replace "${MDADM_BINCACHE}"`
 	DMRAID_BINCACHE=`arch_replace "${DMRAID_BINCACHE}"`
@@ -167,8 +168,8 @@ determine_real_args() {
 			BOOTLOADER=`echo "${CMD_BOOTLOADER}" | cut -f1 -d:`
 		fi
 	fi
-	
-	if [ "${NO_KERNEL_SOURCES}" != "1" ]
+
+	if [ "${KERNEL_SOURCES}" != "0" ]
 	then
 		if [ ! -d ${KERNEL_DIR} ]
 		then
@@ -178,11 +179,11 @@ determine_real_args() {
 
 	if [ -z "${KERNCACHE}" ]
 	then
-		if [ "${KERNEL_DIR}" = '' -a "${NO_KERNEL_SOURCES}" != "1" ]
+		if [ "${KERNEL_DIR}" = '' -a "${KERNEL_SOURCES}" != "0" ]
 		then
 			gen_die 'No kernel source directory!'
 		fi
-		if [ ! -e "${KERNEL_DIR}" -a "${NO_KERNEL_SOURCES}" != "1" ]
+		if [ ! -e "${KERNEL_DIR}" -a "${KERNEL_SOURCES}" != "0" ]
 		then
 			gen_die 'No kernel source directory!'
 		fi
@@ -193,7 +194,7 @@ determine_real_args() {
 		fi
 	fi
 
-	# Special case:  If --no-clean is specified on the command line, 
+	# Special case:  If --no-clean is specified on the command line,
 	# imply --no-mrproper.
 	if [ "${CMD_CLEAN}" != '' ]
 	then
@@ -202,12 +203,12 @@ determine_real_args() {
 			MRPROPER=0
 		fi
 	fi
-	
+
 	if [ -n "${MINKERNPACKAGE}" ]
 	then
 		mkdir -p `dirname ${MINKERNPACKAGE}`
 	fi
-	
+
 	if [ -n "${MODULESPACKAGE}" ]
 	then
 		mkdir -p `dirname ${MODULESPACKAGE}`
@@ -222,6 +223,6 @@ determine_real_args() {
 	then
 		INTEGRATED_INITRAMFS=0
 	fi
-	
+
 	get_KV
 }

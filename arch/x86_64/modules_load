@@ -29,3 +29,6 @@ MODULES_FS="ext4"
 
 # Graphics
 MODULES_GFX="nouveau ch7006 ttm drm_kms_helper drm sil164"
+
+# Crypto
+MODULES_CRYPTO="sha256_generic"
