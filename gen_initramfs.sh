@@ -732,7 +732,7 @@ create_initramfs() {
 			if [ -n "${compression}" ]; then
 				print_info 1 "        >> Compressing cpio data (${compress_ext})..."
 				${compress_cmd} "${CPIO}" || gen_die "Compression (${compress_cmd}) failed"
-				mv -f "${CPIO}${compress_ext}" "${CPIO}" || gen_die "Rename failed"
+				mv -f "${CPIO}${compress_ext}" "${CPIO}" || gen_die "Rename failed bla"
 			else
 				print_info 1 "        >> Not compressing cpio data ..."
 			fi
@@ -744,7 +744,7 @@ create_initramfs() {
 		if ! isTrue "${INTEGRATED_INITRAMFS}"
 		then
 			copy_image_with_preserve "initramfs" \
-				"${TMPDIR}/initramfs-${KV}" \
+				"${TMPDIR}/initramfs-${KV}".cpio \
 				"initramfs-${KNAME}-${ARCH}-${KV}"
 		fi
 	fi
