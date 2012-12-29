@@ -539,7 +539,6 @@ compile_dropbear() {
 		./configure >> ${LOGFILE} 2>&1 ||
 			gen_die 'Configure of dmraid failed!'
 		print_info 1 'dmraid: >> Compiling...'
-		export STATIC=1
 		compile_generic '' utils ||
 			gen_die 'Dropbear compile failed'
 		echo "Compile successful"
