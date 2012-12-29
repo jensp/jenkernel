@@ -274,6 +274,24 @@ append_dmraid(){
 	rm -r "${TEMP}/initramfs-dmraid-temp/"
 }
 
+append_dropbear() {
+        if [ -d "${TEMP}/initramfs-dropbear-temp" ]
+        then
+                rm -r "${TEMP}/initramfs-dropbear-temp/"
+        fi
+        print_info 1 'DROPBEAR: Adding support (compiling binaries)...'
+        compile_dropbear
+        mkdir -p "${TEMP}/initramfs-dropbear-temp/"
+        /bin/tar -jxpf "${DROPBEAR_BINCACHE}" -C "${TEMP}/initramfs-dropbear-temp" ||
+                gen_die "Could not extract dropbear binary cache!";
+        cd "${TEMP}/initramfs-dropbear-temp/"
+        log_future_cpio_content
+        find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
+                        || gen_die "compressing dropbear cpio"
+        cd "${TEMP}"
+        rm -r "${TEMP}/initramfs-dropbear-temp/"
+}
+	
 append_iscsi(){
 	if [ -d "${TEMP}/initramfs-iscsi-temp" ]
 	then
@@ -765,6 +783,7 @@ create_initramfs() {
 	isTrue "${CMD_E2FSPROGS}" && append_data 'e2fsprogs'
 	append_data 'lvm' "${LVM}"
 	append_data 'dmraid' "${DMRAID}"
+	append_data 'dropbear' "${DROPBEAR}"
 	append_data 'iscsi' "${ISCSI}"
 	append_data 'mdadm' "${MDADM}"
 	append_data 'luks' "${LUKS}"
