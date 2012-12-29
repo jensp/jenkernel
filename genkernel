@@ -2,7 +2,7 @@
 # $Id$
 
 PATH="${PATH}:/sbin:/usr/sbin"
-GK_V='3.4.28'
+GK_V='3.4.45'
 
 # Set the default for TMPDIR.  May be modified by genkernel.conf or the
 # --tempdir command line option.
@@ -25,16 +25,19 @@ parse_opt() {
 
 # We don't know where our config is, so we check for it, and default to using
 # /etc/genkernel.conf if nobody has specified one.
-case "$*" in
-	--config=*)
-		CMD_GK_CONFIG=`parse_opt "$*"`
-	;;
-esac
+
+# NOTE: We are look for --config=... in a way that doesn't modify $@ since we access that again, later
+for (( i=1; i<=$# ; i=i+1 )); do
+	eval arg="\$$i"
+	[[ "${arg}" = --config=* ]] && CMD_GK_CONFIG=`parse_opt "${arg}"`
+done
 
 # Pull in our configuration
-source ${CMD_GK_CONFIG:-/etc/genkernel.conf} || small_die "Could not read /etc/genkernel.conf"
+_GENKERNEL_CONF=${CMD_GK_CONFIG:-/etc/genkernel.conf}
+source "${_GENKERNEL_CONF}" || small_die "Could not read ${_GENKERNEL_CONF}"
 
 # Start sourcing other scripts
+source ${GK_SHARE}/defaults/software.sh || small_die "Could not read ${GK_SHARE}/defaults/software.sh"
 source ${GK_SHARE}/gen_funcs.sh || small_die "Could not read ${GK_SHARE}/gen_funcs.sh"
 source ${GK_SHARE}/gen_cmdline.sh || gen_die "Could not read ${GK_SHARE}/gen_cmdline.sh"
 source ${GK_SHARE}/gen_arch.sh || gen_die "Could not read ${GK_SHARE}/gen_arch.sh"
@@ -101,8 +104,13 @@ echo
 get_official_arch
 
 # Read arch-specific config
+print_info 1 "Using genkernel.conf from ${_GENKERNEL_CONF}"
+print_info 1 "Sourcing arch-specific config.sh from ${ARCH_CONFIG} .."
 source ${ARCH_CONFIG} || gen_die "Could not read ${ARCH_CONFIG}"
-source ${GK_SHARE}/arch/${ARCH}/modules_load || gen_die "Could not read ${GK_SHARE}/arch/${ARCH}/modules_load"
+_MODULES_LOAD=${GK_SHARE}/arch/${ARCH}/modules_load
+print_info 1 "Sourcing arch-specific modules_load from ${_MODULES_LOAD} .."
+source "${_MODULES_LOAD}" || gen_die "Could not read ${_MODULES_LOAD}"
+echo
 
 # Merge modules_load from config
 for group_modules in ${!AMODULES_*}; do
@@ -117,6 +125,7 @@ done
 # get the real arguments for usage...
 
 determine_real_args
+determine_config_file
 
 set_kernel_arch
 
@@ -129,6 +138,7 @@ check_distfiles
 dump_debugcache
 
 NORMAL=${BOLD} print_info 1 "Linux Kernel ${BOLD}${KV}${NORMAL} for ${BOLD}${ARCH}${NORMAL}..."
+print_info 1 ".. with config file ${KERNEL_CONFIG}"
 
 # Check BOOTDIR is mounted
 if ! isTrue ${CMD_INSTALL}
@@ -226,7 +236,9 @@ then
 	then
 		print_info 1 "Copying config for successful build to /etc/kernels/kernel-config-${ARCH}-${KV}"
 		[ ! -e '/etc/kernels' ] && mkdir -p /etc/kernels
-		cp "${KERNEL_DIR}/.config" "/etc/kernels/kernel-config-${ARCH}-${KV}"
+		cp "${KERNEL_OUTPUTDIR}/.config" "/etc/kernels/kernel-config-${ARCH}-${KV}" || \
+			print_warning "Unable to copy the kernel configuration file."
+			# Just a warning because ordinary users are not allowed to write in /etc
 	fi
 fi
 
@@ -279,8 +291,6 @@ fi
 
 if [ "${BUILD_RAMDISK}" = '1' ]
 then
-	[ "${DISKLABEL}" = '1' ] && compile_e2fsprogs
-
 	if [ "${BUSYBOX}" = '1' ]
 	then
 		# Compile Busybox
@@ -321,23 +331,20 @@ then
 	print_info 1 "Kernel compiled successfully!"
 	print_info 1 ''
 	print_info 1 'Required Kernel Parameters:'
+	print_info 1 '    root=/dev/$ROOT'
 	if [ "${BUILD_RAMDISK}" = '0' ]
 	then
-		print_info 1 '    root=/dev/$ROOT'
 		print_info 1 '    [ And "vga=0x317 splash=verbose" if you use a framebuffer ]'
 		print_info 1 ''
 		print_info 1 '    Where $ROOT is the device node for your root partition as the'
 		print_info 1 '    one specified in /etc/fstab'
 	else
-		print_info 1 '    real_root=/dev/$ROOT'
 		print_info 1 ''
 		print_info 1 '    Where $ROOT is the device node for your root partition as the'
 		print_info 1 '    one specified in /etc/fstab'
 		print_info 1 ''
 		print_info 1 "If you require Genkernel's hardware detection features; you MUST"
-		print_info 1 'tell your bootloader to use the provided INITRAMFS file. Otherwise;'
-		print_info 1 'substitute the root argument for the real_root argument if you are'
-		print_info 1 'not planning to use the initramfs...'
+		print_info 1 'tell your bootloader to use the provided INITRAMFS file.'
 	fi
 fi
 
@@ -351,13 +358,23 @@ then
 	[ "${DMRAID}" = '1' ] && print_warning 1 'add "dodmraid" for dmraid support'
 	[ "${MDADM}" = '1' ] && print_warning 1 'add "domdadm" for RAID support'
 	[ "${DMRAID}" = '1' ] && print_warning 1 '	or "dodmraid=<additional options>"'
-	[ "${ZFS}" = '1' ] && print_warning 1 'add "dozfs" for ZFS support'
-	[ "${ZFS}" = '1' ] && print_warning 1 '	and either "real_root=ZFS" to use bootfs autodetection or "real_root=ZFS=<dataset>" to force booting from a specific dataset'
+	[ "${ZFS}" = '1' ] && print_warning 1 'add "dozfs" for ZFS volume management support'
+	[ "${ZFS}" = '1' ] && print_warning 1 '	and either "root=ZFS" to use bootfs autodetection or "root=ZFS=<dataset>" to force booting from a specific dataset'
 	[ "${ISCSI}" = '1' ] && print_warning 1 'add at least "iscsi_initiatorname=<initiator name> iscsi_target=<target name> and iscsi_address=<target ip>" for iscsi support'
-	if [ `grep 'CONFIG_EXT[0-9]_FS=' "${KERNEL_DIR}"/.config | wc -l` -ge 2 ]; then
-		print_warning 1 'With support for several ext* filesystems around it may be needed to'
-		print_warning 1 'add "rootfstype=ext3" or "rootfstype=ext4"'
+
+	if [[ "$(file --brief --mime-type "${KERNEL_CONFIG}")" == application/x-gzip ]]; then
+		# Support --kernel-config=/proc/config.gz, mainly
+		CONFGREP=zgrep
+	else
+		CONFGREP=grep
 	fi
+
+	if [ `${CONFGREP} 'CONFIG_EXT[0-9]_FS=' "${KERNEL_CONFIG}" | wc -l` -ge 2 ]; then
+		print_warning 1 'With support for several ext* filesystems available, it may be needed to'
+		print_warning 1 'add "rootfstype=ext3" or "rootfstype=ext4" to the list of boot parameters.'
+	fi
+
+	unset CONFGREP
 fi
 
 [ "${BOOTRW}" != '' ] && mount -o remount,ro ${BOOTDIR}

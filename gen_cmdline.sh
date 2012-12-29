@@ -31,6 +31,7 @@ longusage() {
   echo "	--no-xconfig		Don't run xconfig after oldconfig"
   echo "	--save-config		Save the configuration to /etc/kernels"
   echo "	--no-save-config	Don't save the configuration to /etc/kernels"
+  echo "	--virtio			Include VirtIO kernel code"
   echo "  Kernel Compile settings"
   echo "	--oldconfig		Implies --no-clean and runs a 'make oldconfig'"
   echo "	--clean			Run make clean before compilation"
@@ -63,6 +64,7 @@ longusage() {
   echo "	--kernel-make=<makeprg> GNU Make to use for kernel"
   echo "	--kernel-target=<t>	Override default make target (bzImage)"
   echo "	--kernel-binary=<path>	Override default kernel binary path (arch/foo/boot/bar)"
+  echo "	--kernel-outputdir=<path> Save output files outside the source tree."
 
   echo "	--utils-cc=<compiler>	Compiler to use for utilities"
   echo "	--utils-as=<assembler>	Assembler to use for utils"
@@ -75,6 +77,7 @@ longusage() {
   echo "	--mountboot		Mount BOOTDIR automatically if mountable"
   echo "	--no-mountboot		Don't mount BOOTDIR automatically"  
   echo "	--bootdir=<dir>		Set the location of the boot-directory, default is /boot"
+  echo "	--modprobedir=<dir>	Set the location of the modprobe.d-directory, default is /etc/modprobe.d"
   echo "  Initialization"
   echo "	--splash=<theme>	Enable framebuffer splash using <theme>"
   echo "	--splash-res=<res>	Select splash theme resolutions to install"
@@ -90,6 +93,8 @@ longusage() {
   echo "	--mdadm-config=<file>	Use file as mdadm.conf in initramfs"
   echo "	--dmraid		Include DMRAID support"
   echo "	--no-dmraid		Exclude DMRAID support"
+  echo "	--e2fsprogs		Include e2fsprogs"
+  echo "	--no-e2fsprogs		Exclude e2fsprogs"
   echo "	--zfs			Include ZFS support"
   echo "	--no-zfs		Exclude ZFS support"
   echo "	--multipath		Include Multipath support"
@@ -211,6 +216,10 @@ parse_cmdline() {
 			CMD_KERNEL_CROSS_COMPILE=$(echo ${CMD_KERNEL_CROSS_COMPILE}|sed -e 's/.*[^-]$/&-/g')
 			print_info 2 "CMD_KERNEL_CROSS_COMPILE: ${CMD_KERNEL_CROSS_COMPILE}"
 			;;
+		--kernel-outputdir=*)
+			CMD_KERNEL_OUTPUTDIR=`parse_opt "$*"`
+			print_info 2 "CMD_KERNEL_OUTPUTDIR: ${CMD_KERNEL_OUTPUTDIR}"
+			;;
 		--utils-cc=*)
 			CMD_UTILS_CC=`parse_opt "$*"`
 			print_info 2 "CMD_UTILS_CC: ${CMD_UTILS_CC}"
@@ -247,6 +256,10 @@ parse_cmdline() {
 		--bootdir=*)
 			CMD_BOOTDIR=`parse_opt "$*"`
 			print_info 2 "CMD_BOOTDIR: ${CMD_BOOTDIR}"
+			;;
+		--modprobedir=*)
+			CMD_MODPROBEDIR=`parse_opt "$*"`
+			print_info 2 "CMD_MODPROBEDIR: ${CMD_MODPROBEDIR}"
 			;;
 		--do-keymap-auto)
 			CMD_DOKEYMAPAUTO=1
@@ -301,9 +314,17 @@ parse_cmdline() {
 			fi
 			print_info 2 "CMD_DMRAID: ${CMD_DMRAID}"
 			;;
+		--e2fsprogs|--no-e2fsprogs)
+			CMD_E2FSPROGS=`parse_optbool "$*"`
+			print_info 2 "CMD_E2FSPROGS: ${CMD_E2FSPROGS}"
+			;;
 		--zfs|--no-zfs)
 			CMD_ZFS=`parse_optbool "$*"`
 			print_info 2 "CMD_ZFS: ${CMD_ZFS}"
+			;;
+		--virtio)
+			CMD_VIRTIO=`parse_optbool "$*"`
+			print_info 2 "CMD_VIRTIO: ${CMD_VIRTIO}"
 			;;
 		--multipath|--no-multipath)
 			CMD_MULTIPATH=`parse_optbool "$*"`

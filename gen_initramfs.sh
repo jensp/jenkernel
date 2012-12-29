@@ -3,16 +3,52 @@
 
 CPIO_ARGS="--quiet -o -H newc"
 
+# The copy_binaries function is explicitly released under the CC0 license to
+# encourage wide adoption and re-use.  That means:
+# - You may use the code of copy_binaries() as CC0 outside of genkernel
+# - Contributions to this function are licensed under CC0 as well.
+# - If you change it outside of genkernel, please consider sending your
+#   modifications back to genkernel@gentoo.org.
+#
+# On a side note: "Both public domain works and the simple license provided by
+#                  CC0 are compatible with the GNU GPL."
+#                 (from https://www.gnu.org/licenses/license-list.html#CC0)
+#
+# Written by: 
+# - Sebastian Pipping <sebastian@pipping.org> (error checking)
+# - Robin H. Johnson <robbat2@gentoo.org> (complete rewrite)
+# - Richard Yao <ryao@cs.stonybrook.edu> (original concept)
+# Usage:
+# copy_binaries DESTDIR BINARIES...
 copy_binaries() {
 	local destdir=$1
 	shift
-	lddtree "$@" \
-		| tr ')(' '\n' \
-		| awk  '/=>/{ if($3 ~ /^\//){print $3}}' \
-		| sort \
-		| uniq \
-		| cpio -p --make-directories --dereference --quiet $destdir
 
+	for binary in "$@"; do
+		[[ -e "${binary}" ]] \
+				|| gen_die "Binary ${binary} could not be found"
+
+		if LC_ALL=C lddtree "${binary}" 2>&1 | fgrep -q 'not found'; then
+			gen_die "Binary ${binary} is linked to missing libraries and may need to be re-built"
+		fi
+	done
+	# This must be OUTSIDE the for loop, we only want to run lddtree etc ONCE.
+	lddtree "$@" \
+			| tr ')(' '\n' \
+			| awk  '/=>/{ if($3 ~ /^\//){print $3}}' \
+			| sort \
+			| uniq \
+			| cpio -p --make-directories --dereference --quiet "${destdir}" \
+			|| gen_die "Binary ${f} or some of its library dependencies could not be copied"
+}
+
+log_future_cpio_content() {
+	if [[ "${LOGLEVEL}" -gt 1 ]]; then
+		echo =================================================================
+		echo "About to add these files from '${PWD}' to cpio archive:"
+		find . | xargs ls -ald
+		echo =================================================================
+	fi
 }
 
 append_base_layout() {
@@ -52,8 +88,10 @@ append_base_layout() {
 	mknod -m 600 ttyS0 c 4 64
 
 	date -u '+%Y%m%d-%H%M%S' > ${TEMP}/initramfs-base-temp/etc/build_date
+	echo "Genkernel $GK_V" > ${TEMP}/initramfs-base-temp/etc/build_id
 
 	cd "${TEMP}/initramfs-base-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing baselayout cpio"
 	cd "${TEMP}"
@@ -83,10 +121,28 @@ append_busybox() {
 	done
 
 	cd "${TEMP}/initramfs-busybox-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing busybox cpio"
 	cd "${TEMP}"
 	rm -rf "${TEMP}/initramfs-busybox-temp" > /dev/null
+}
+
+append_e2fsprogs(){
+	if [ -d "${TEMP}"/initramfs-e2fsprogs-temp ]
+	then
+		rm -r "${TEMP}"/initramfs-e2fsprogs-temp
+	fi
+
+	cd "${TEMP}" \
+			|| gen_die "cd '${TEMP}' failed"
+	mkdir -p initramfs-e2fsprogs-temp
+	copy_binaries "${TEMP}"/initramfs-e2fsprogs-temp/ /sbin/{e2fsck,mke2fs}
+
+	cd "${TEMP}"/initramfs-e2fsprogs-temp \
+			|| gen_die "cd '${TEMP}/initramfs-e2fsprogs-temp' failed"
+	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}"
+	rm -rf "${TEMP}"/initramfs-e2fsprogs-temp > /dev/null
 }
 
 append_blkid(){
@@ -95,11 +151,14 @@ append_blkid(){
 		rm -r "${TEMP}/initramfs-blkid-temp/"
 	fi
 	cd ${TEMP}
-	mkdir -p "${TEMP}/initramfs-blkid-temp/sbin/"
-	[ "${DISKLABEL}" = '1' ] && { /bin/bzip2 -dc "${BLKID_BINCACHE}" > "${TEMP}/initramfs-blkid-temp/sbin/blkid" ||
-		gen_die "Could not extract blkid binary cache!"; }
-	chmod a+x "${TEMP}/initramfs-blkid-temp/sbin/blkid"
+	mkdir -p "${TEMP}/initramfs-blkid-temp/"
+
+	if [[ "${DISKLABEL}" = "1" ]]; then
+		copy_binaries "${TEMP}"/initramfs-blkid-temp/ /sbin/blkid
+	fi
+
 	cd "${TEMP}/initramfs-blkid-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing blkid cpio"
 	cd "${TEMP}"
@@ -131,6 +190,7 @@ append_unionfs_fuse() {
 		gen_die 'Could not extract unionfs-fuse binary cache!'
 	chmod a+x "${TEMP}/initramfs-unionfs-fuse-temp/sbin/unionfs"
 	cd "${TEMP}/initramfs-unionfs-fuse-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing unionfs fuse cpio"
 	cd "${TEMP}"
@@ -151,6 +211,7 @@ append_unionfs_fuse() {
 #	cp -f /etc/suspend.conf "${TEMP}/initramfs-suspend-temp/etc" ||
 #		gen_die 'Could not copy /etc/suspend.conf'
 #	cd "${TEMP}/initramfs-suspend-temp/"
+#	log_future_cpio_content
 #	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 #			|| gen_die "compressing suspend cpio"
 #	rm -r "${TEMP}/initramfs-suspend-temp/"
@@ -165,7 +226,10 @@ append_multipath(){
 	mkdir -p "${TEMP}"/initramfs-multipath-temp/{bin,etc,sbin,lib}/
 
 	# Copy files
-	copy_binaries "${TEMP}/initramfs-multipath-temp" /sbin/{multipath,kpartx,mpath_prio_*,devmap_name,dmsetup} /lib64/udev/scsi_id /bin/mountpoint
+	copy_binaries "${TEMP}/initramfs-multipath-temp" \
+		/bin/mountpoint \
+		/sbin/{multipath,kpartx,mpath_prio_*,devmap_name,dmsetup} \
+		/{lib,lib64}/{udev/scsi_id,multipath/*so} 
 
 	if [ -x /sbin/multipath ]
 	then
@@ -178,6 +242,7 @@ append_multipath(){
 		cp /etc/scsi_id.config "${TEMP}/initramfs-multipath-temp/etc/" || gen_die 'could not copy scsi_id.config'
 	fi
 	cd "${TEMP}/initramfs-multipath-temp"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing multipath cpio"
 	cd "${TEMP}"
@@ -202,6 +267,7 @@ append_dmraid(){
 		ln -sf raid456.kp raid45.ko
 		cd "${TEMP}/initramfs-dmraid-temp/"
 	fi
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing dmraid cpio"
 	cd "${TEMP}"
@@ -221,6 +287,7 @@ append_iscsi(){
 		gen_die "Could not extract iscsi binary cache!"
 	chmod a+x "${TEMP}/initramfs-iscsi-temp/bin/iscsistart"
 	cd "${TEMP}/initramfs-iscsi-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing iscsi cpio"
 	cd "${TEMP}"
@@ -265,9 +332,9 @@ append_lvm(){
 		# See bug 382555
 		mv ${TEMP}/initramfs-lvm-temp/sbin/dmsetup.static ${TEMP}/initramfs-lvm-temp/bin/dmsetup ||
 			gen_die 'LVM error: Could not move dmsetup.static to dmsetup!'
-		rm -rf  ${TEMP}/initramfs-lvm-temp/{lib,share,man,include,sbin/{lvm,dmsetup}}
+		rm -rf ${TEMP}/initramfs-lvm-temp/{lib,share,man,include,sbin/{lvm,dmsetup}}
 	fi
-	if [ -x /sbin/lvm ]
+	if [ -x /sbin/lvm -o -x /bin/lvm ]
 	then
 #		lvm dumpconfig 2>&1 > /dev/null || gen_die 'Could not copy over lvm.conf!'
 #		ret=$?
@@ -280,6 +347,7 @@ append_lvm(){
 #		fi
 	fi
 	cd "${TEMP}/initramfs-lvm-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing lvm cpio"
 	cd "${TEMP}"
@@ -323,6 +391,7 @@ append_mdadm(){
 		fi
 	fi
 	cd "${TEMP}/initramfs-mdadm-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing mdadm cpio"
 	cd "${TEMP}"
@@ -341,13 +410,14 @@ append_zfs(){
 	for i in /etc/zfs/{zdev.conf,zpool.cache}
 	do
 		cp -a "${i}" "${TEMP}/initramfs-zfs-temp/etc/zfs" \
-			|| gen_die "Could not copy file ${i} for ZFS"
+			|| print_warning 1 "Could not copy file ${i} for ZFS"
 	done
 
 	# Copy binaries
 	copy_binaries "${TEMP}/initramfs-zfs-temp" /sbin/{mount.zfs,zfs,zpool}
 
 	cd "${TEMP}/initramfs-zfs-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing zfs cpio"
 	cd "${TEMP}"
@@ -375,6 +445,7 @@ append_splash(){
 			cp -f "/usr/share/splashutils/initrd.splash" "${TEMP}/initramfs-splash-temp/etc"
 		fi
 		cd "${TEMP}/initramfs-splash-temp/"
+		log_future_cpio_content
 		find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing splash cpio"
 		cd "${TEMP}"
@@ -386,6 +457,7 @@ append_splash(){
 
 append_overlay(){
 	cd ${INITRAMFS_OVERLAY}
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing overlay cpio"
 }
@@ -409,14 +481,11 @@ append_luks() {
 		[ -x "${_luks_source}" ] \
 				|| gen_die "$(printf "${_luks_error_format}" "no file ${_luks_source}")"
 
-		is_static "${_luks_source}" \
-				|| gen_die "$(printf "${_luks_error_format}" "${_luks_source} not a static binary")"
-
 		print_info 1 "Including LUKS support"
-		cp "${_luks_source}" ${TEMP}/initramfs-luks-temp${_luks_dest}
-		chmod +x "${TEMP}/initramfs-luks-temp${_luks_dest}"
+		copy_binaries "${TEMP}/initramfs-luks-temp/" /sbin/cryptsetup
 	fi
 
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 		|| gen_die "appending cryptsetup to cpio"
 
@@ -447,6 +516,7 @@ append_firmware() {
 	else
 		cp -a "${FIRMWARE_DIR}"/* ${TEMP}/initramfs-firmware-temp/lib/firmware/
 	fi
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 		|| gen_die "appending firmware to cpio"
 	cd "${TEMP}"
@@ -468,6 +538,7 @@ append_gpg() {
 		gen_die 'Could not extract gpg binary cache!'
 	chmod a+x "${TEMP}/initramfs-gpg-temp/sbin/gpg"
 	cd "${TEMP}/initramfs-gpg-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}"
 	rm -rf "${TEMP}/initramfs-gpg-temp" > /dev/null
 }
@@ -520,10 +591,46 @@ append_modules() {
 		print_list ${!group_modules} > "${TEMP}/initramfs-modules-${KV}-temp/etc/modules/${group}"
 	done
 	cd "${TEMP}/initramfs-modules-${KV}-temp/"
+	log_future_cpio_content
 	find . | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing modules cpio"
 	cd "${TEMP}"
 	rm -r "${TEMP}/initramfs-modules-${KV}-temp/"	
+}
+
+append_modprobed() {
+	local TDIR="${TEMP}/initramfs-modprobe.d-temp"
+	if [ -d "${TDIR}" ]
+	then
+		rm -r "${TDIR}"
+	fi
+
+	mkdir -p "${TDIR}/etc/module_options/"
+
+	# Load module parameters
+	for dir in $(find "${MODPROBEDIR}"/*)
+	do
+		while read x
+		do
+			case "${x}" in
+				options*)
+					module_name="$(echo "$x" | cut -d ' ' -f 2)"
+					[ "${module_name}" != "$(echo)" ] || continue
+					module_options="$(echo "$x" | cut -d ' ' -f 3-)"
+					[ "${module_options}" != "$(echo)" ] || continue
+					echo "${module_options}" >> "${TDIR}/etc/module_options/${module_name}.conf"
+				;;
+			esac
+		done < "${dir}"
+	done
+
+	cd "${TDIR}"
+	log_future_cpio_content
+	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
+			|| gen_die "compressing modprobe.d cpio"
+
+	cd "${TEMP}"
+	rm -rf "${TDIR}" > /dev/null
 }
 
 # check for static linked file with objdump
@@ -604,8 +711,10 @@ append_auxilary() {
 	fi
 	if isTrue $CMD_KEYMAP
 	then
-		mkdir -p "${TEMP}/initramfs-aux-temp/lib/keymaps"
-		/bin/tar -C "${TEMP}/initramfs-aux-temp/lib/keymaps" -zxf "${GK_SHARE}/defaults/keymaps.tar.gz"
+		print_info 1 "        >> Copying keymaps"
+		mkdir -p "${TEMP}/initramfs-aux-temp/lib/"
+		cp -R "${GK_SHARE}/defaults/keymaps" "${TEMP}/initramfs-aux-temp/lib/" \
+				|| gen_die "Error while copying keymaps"
 	fi
 
 	cd ${TEMP}/initramfs-aux-temp/sbin && ln -s ../init init
@@ -622,6 +731,7 @@ append_auxilary() {
 	fi
 
 	cd "${TEMP}/initramfs-aux-temp/"
+	log_future_cpio_content
 	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
 			|| gen_die "compressing auxilary cpio"
 	cd "${TEMP}"
@@ -652,6 +762,7 @@ create_initramfs() {
 	append_data 'base_layout'
 	append_data 'auxilary' "${BUSYBOX}"
 	append_data 'busybox' "${BUSYBOX}"
+	isTrue "${CMD_E2FSPROGS}" && append_data 'e2fsprogs'
 	append_data 'lvm' "${LVM}"
 	append_data 'dmraid' "${DMRAID}"
 	append_data 'iscsi' "${ISCSI}"
@@ -675,6 +786,8 @@ create_initramfs() {
 
 	append_data 'splash' "${SPLASH}"
 
+	append_data 'modprobed'
+
 	if isTrue "${FIRMWARE}" && [ -n "${FIRMWARE_DIR}" ]
 	then
 		append_data 'firmware'
@@ -692,41 +805,94 @@ create_initramfs() {
 		# The kernel will do a better job of it than us.
 		mv ${TMPDIR}/initramfs-${KV} ${TMPDIR}/initramfs-${KV}.cpio
 		sed -i '/^.*CONFIG_INITRAMFS_SOURCE=.*$/d' ${KERNEL_DIR}/.config
+		compress_config='INITRAMFS_COMPRESSION_NONE'
+		case ${compress_ext} in
+			gz)  compress_config='INITRAMFS_COMPRESSION_GZIP' ;;
+			bz2) compress_config='INITRAMFS_COMPRESSION_BZIP2' ;;
+			lzma) compress_config='INITRAMFS_COMPRESSION_LZMA' ;;
+			xz) compress_config='INITRAMFS_COMPRESSION_XZ' ;;
+			lzo) compress_config='INITRAMFS_COMPRESSION_LZO' ;;
+			*) compress_config='INITRAMFS_COMPRESSION_NONE' ;;
+		esac
+		# All N default except XZ, so there it gets used if the kernel does
+		# compression on it's own.
 		cat >>${KERNEL_DIR}/.config	<<-EOF
 		CONFIG_INITRAMFS_SOURCE="${TMPDIR}/initramfs-${KV}.cpio${compress_ext}"
 		CONFIG_INITRAMFS_ROOT_UID=0
 		CONFIG_INITRAMFS_ROOT_GID=0
+		CONFIG_INITRAMFS_COMPRESSION_NONE=n
+		CONFIG_INITRAMFS_COMPRESSION_GZIP=n
+		CONFIG_INITRAMFS_COMPRESSION_BZIP2=n
+		CONFIG_INITRAMFS_COMPRESSION_LZMA=n
+		CONFIG_INITRAMFS_COMPRESSION_XZ=y
+		CONFIG_INITRAMFS_COMPRESSION_LZO=n
+		CONFIG_${compress_config}=y
 		EOF
 	else
 		if isTrue "${COMPRESS_INITRD}"
 		then
+			# NOTE:  We do not work with ${KERNEL_CONFIG} here, since things like
+			#        "make oldconfig" or --noclean could be in effect.
+			if [ -f "${KERNEL_DIR}"/.config ]; then
+				local ACTUAL_KERNEL_CONFIG="${KERNEL_DIR}"/.config
+			else
+				local ACTUAL_KERNEL_CONFIG="${KERNEL_CONFIG}"
+			fi
+
+			if [[ "$(file --brief --mime-type "${ACTUAL_KERNEL_CONFIG}")" == application/x-gzip ]]; then
+				# Support --kernel-config=/proc/config.gz, mainly
+				local CONFGREP=zgrep
+			else
+				local CONFGREP=grep
+			fi
+
 			cmd_xz=$(type -p xz)
 			cmd_lzma=$(type -p lzma)
 			cmd_bzip2=$(type -p bzip2)
 			cmd_gzip=$(type -p gzip)
 			cmd_lzop=$(type -p lzop)
+			pkg_xz='app-arch/xz-utils'
+			pkg_lzma='app-arch/xz-utils'
+			pkg_bzip2='app-arch/bzip2'
+			pkg_gzip='app-arch/gzip'
+			pkg_lzop='app-arch/lzop'
 			local compression
 			case ${COMPRESS_INITRD_TYPE} in
-				xz|lzma|bzip2|gzip2|lzo) compression=${COMPRESS_INITRD_TYPE} ;;
-				best)
-					if grep -sq '^CONFIG_RD_XZ=y' ${KERNEL_DIR}/.config && test -n "${cmd_xz}" ; then
-						compression=xz
-					elif grep -sq '^CONFIG_RD_LZMA=y' ${KERNEL_DIR}/.config && test -n "${cmd_lzma}" ; then
-						compression=lzma
-					elif grep -sq '^CONFIG_RD_BZIP2=y' ${KERNEL_DIR}/.config  && test -n "${cmd_bzip2}" ; then
-						compression=bzip2
-					elif grep -sq '^CONFIG_RD_GZIP=y' ${KERNEL_DIR}/.config && test -n "${cmd_gzip}" ; then
-						compression=gzip
-					elif grep -sq '^CONFIG_RD_LZO=y' ${KERNEL_DIR}/.config && test -n "${cmd_lzop}" ; then
-						compression=lzo
-					fi ;;
+				xz|lzma|bzip2|gzip|lzop) compression=${COMPRESS_INITRD_TYPE} ;;
+				lzo) compression=lzop ;;
+				best|fastest)
+					for tuple in \
+							'CONFIG_RD_XZ    cmd_xz    xz' \
+							'CONFIG_RD_LZMA  cmd_lzma  lzma' \
+							'CONFIG_RD_BZIP2 cmd_bzip2 bzip2' \
+							'CONFIG_RD_GZIP  cmd_gzip  gzip' \
+							'CONFIG_RD_LZO   cmd_lzop  lzop'; do
+						set -- ${tuple}
+						kernel_option=$1
+						cmd_variable_name=$2
+						if ${CONFGREP} -q "^${kernel_option}=y" "${ACTUAL_KERNEL_CONFIG}" && test -n "${!cmd_variable_name}" ; then
+							compression=$3
+							[[ ${COMPRESS_INITRD_TYPE} == best ]] && break
+						fi
+					done
+					[[ -z "${compression}" ]] && gen_die "None of the initramfs compression methods we tried are supported by your kernel (config file \"${ACTUAL_KERNEL_CONFIG}\"), strange!?"
+					;;
+				*)
+					gen_die "Compression '${COMPRESS_INITRD_TYPE}' unknown"
+					;;
 			esac
+
+			# Check for actual availability
+			cmd_variable_name=cmd_${compression}
+			pkg_variable_name=pkg_${compression}
+			[[ -z "${!cmd_variable_name}" ]] && gen_die "Compression '${compression}' is not available. Please install package '${!pkg_variable_name}'."
+
 			case $compression in
 				xz) compress_ext='.xz' compress_cmd="${cmd_xz} -e --check=none -z -f -9" ;;
 				lzma) compress_ext='.lzma' compress_cmd="${cmd_lzma} -z -f -9" ;;
 				bzip2) compress_ext='.bz2' compress_cmd="${cmd_bzip2} -z -f -9" ;;
 				gzip) compress_ext='.gz' compress_cmd="${cmd_gzip} -f -9" ;;
-				lzo) compress_ext='.lzo' compress_cmd="${cmd_lzop} -f -9" ;;
+				lzop) compress_ext='.lzo' compress_cmd="${cmd_lzop} -f -9" ;;
 			esac
 	
 			if [ -n "${compression}" ]; then

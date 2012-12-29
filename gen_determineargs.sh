@@ -90,6 +90,8 @@ determine_real_args() {
 	set_config_with_override STRING KERNEL_CROSS_COMPILE CMD_KERNEL_CROSS_COMPILE
 	set_config_with_override STRING UTILS_CROSS_COMPILE  CMD_UTILS_CROSS_COMPILE
 	set_config_with_override STRING BOOTDIR              CMD_BOOTDIR              "/boot"
+	set_config_with_override STRING KERNEL_OUTPUTDIR     CMD_KERNEL_OUTPUTDIR     "${KERNEL_DIR}"
+	set_config_with_override STRING MODPROBEDIR          CMD_MODPROBEDIR          "/etc/modprobe.d"
 
 	set_config_with_override BOOL   SPLASH               CMD_SPLASH
 	set_config_with_override BOOL   POSTCLEAR            CMD_POSTCLEAR
@@ -101,7 +103,7 @@ determine_real_args() {
 	set_config_with_override STRING MODULESPACKAGE       CMD_MODULESPACKAGE
 	set_config_with_override STRING KERNCACHE            CMD_KERNCACHE
 	set_config_with_override BOOL   RAMDISKMODULES       CMD_RAMDISKMODULES        "yes"
-	set_config_with_override BOOL   ALLRAMDISKMODULES    CMD_ALLRAMDISKMODULES     "no"
+	set_config_with_override BOOL   ALLRAMDISKMODULES    CMD_ALLRAMDISKMODULES
 	set_config_with_override STRING INITRAMFS_OVERLAY    CMD_INITRAMFS_OVERLAY
 	set_config_with_override BOOL   MOUNTBOOT            CMD_MOUNTBOOT
 	set_config_with_override BOOL   BUILD_STATIC         CMD_STATIC
@@ -121,7 +123,9 @@ determine_real_args() {
 	set_config_with_override BOOL   GPG                  CMD_GPG
 	set_config_with_override BOOL   MDADM                CMD_MDADM
 	set_config_with_override STRING MDADM_CONFIG         CMD_MDADM_CONFIG
+	set_config_with_override BOOL   E2FSPROGS            CMD_E2FSPROGS            "no"
 	set_config_with_override BOOL   ZFS                  CMD_ZFS
+	set_config_with_override BOOL   VIRTIO               CMD_VIRTIO				  "no"
 	set_config_with_override BOOL   MULTIPATH            CMD_MULTIPATH
 	set_config_with_override BOOL   FIRMWARE             CMD_FIRMWARE
 	set_config_with_override STRING FIRMWARE_DIR         CMD_FIRMWARE_DIR         "/lib/firmware"
@@ -135,6 +139,7 @@ determine_real_args() {
 
 	BOOTDIR=`arch_replace "${BOOTDIR}"`
 	BOOTDIR=${BOOTDIR%/}    # Remove any trailing slash
+	MODPROBEDIR=${MODPROBEDIR%/}    # Remove any trailing slash
 
 	CACHE_DIR=`arch_replace "${CACHE_DIR}"`
 	BUSYBOX_BINCACHE=`cache_replace "${BUSYBOX_BINCACHE}"`

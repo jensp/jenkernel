@@ -62,9 +62,13 @@ quiet_kmsg
 CMDLINE=$(cat /proc/cmdline)
 # Scan CMDLINE for any specified real_root= or cdroot arguments
 FAKE_ROOT=''
+FAKE_INIT=''
 REAL_ROOTFLAGS=''
+INIT_OPTS=''
 ROOTFSTYPE='auto'
 CRYPT_SILENT=0
+
+mkdir -p /etc/cmdline /etc/modprobe.d
 for x in ${CMDLINE}
 do
 	case "${x}" in
@@ -80,6 +84,9 @@ do
 		real_init=*)
 			REAL_INIT=${x#*=}
 		;;
+		init=*)
+			FAKE_INIT=${x#*=}
+		;;
 		init_opts=*)
 			INIT_OPTS=${x#*=}
 		;;
@@ -93,6 +100,9 @@ do
 		;;
 		cdroot_type=*)
 			CDROOT_TYPE=${x#*=}
+		;;
+		cdroot_marker=*)
+			CDROOT_MARKER=${x#*=}
 		;;
 		# Start livecd loop, looptype options
 		loop=*)
@@ -122,17 +132,16 @@ do
 			DMRAID_OPTS=${x#*=}
 			USE_DMRAID_NORMAL=1
 		;;
+		domultipath) 
+			good_msg "Booting with multipath activated." 
+			USE_MULTIPATH_NORMAL=1 
+		;;
 		dozfs*)
-			if [ ! -x /sbin/zfs ]; then
-				USE_ZFS=0
-				bad_msg 'zfs binary not found: aborting use of zfs!'
-			else
-				USE_ZFS=1
-				MY_HWOPTS="${MY_HWOPTS} zfs"
-				if [ "${x#*=}" = 'force' ]
-				then
-					ZPOOL_FORCE=-f
-				fi
+			USE_ZFS=1
+
+			if [ "${x#*=}" = 'force' ]
+			then
+				ZPOOL_FORCE=-f
 			fi
 		;;
 		# Debug Options
@@ -173,6 +182,9 @@ do
 		;;
 		part=*)
 			MDPART=${x#*=}
+		;;
+		part|partitionable)
+			MDPART=1
 		;;
 		# NFS
 		ip=*)
@@ -271,6 +283,13 @@ do
 		nounionfs)
 			USE_UNIONFS_NORMAL=0
 			;;
+		*=*)
+			case "${x%%=*}" in
+			*.*)
+				echo "${x#*.}" >> "/etc/module_options/${x%%.*}.conf"
+			;;
+			esac
+		;;
 	esac
 done
 
@@ -278,16 +297,59 @@ if [ -z "${REAL_ROOT}" -a \( "${CDROOT}" = '0' \)  -a \( "${FAKE_ROOT}" != "/dev
 then
 	REAL_ROOT="${FAKE_ROOT}"
 fi
+if [ -z "${REAL_INIT}" -a \( "${CDROOT}" = '0' \)  -a \( "${FAKE_INIT}" != "/linuxrc" \) ]
+then
+	REAL_INIT="${FAKE_INIT}"
+fi
+
+# Set variables based on the value of REAL_ROOT
+case "${REAL_ROOT}" in
+	ZFS=*)
+		ZFS_POOL=${REAL_ROOT#*=}
+		ZFS_POOL=${ZFS_POOL%%/*}
+		USE_ZFS=1
+	;;
+	ZFS)
+		USE_ZFS=1
+	;;
+esac
+
+# Verify that it is safe to use ZFS
+if [ "USE_ZFS" = "1" ]
+then
+	if [ -x /sbin/zfs -a -x /sbin/zpool ]
+	then
+		MY_HWOPTS="${MY_HWOPTS} zfs"
+	else
+		USE_ZFS=0
+
+		[ -x /sbin/zfs ] || bad_msg '/sbin/zfs not found!'
+		[ -x /sbin/zpool ] || bad_msg '/sbin/zpool not found!'
+		bad_msg 'Aborting use of zfs!'
+	fi
+fi
 
 splash 'init'
 
 cmdline_hwopts
 
+# Mount devfs
+mount_devfs
+
 # Mount sysfs
 mount_sysfs
 
-# Setup hotplugging for firmware loading
-setup_hotplug
+# Initialize mdev
+if [ "${KV_2_6_OR_GREATER}" ]
+then
+	good_msg 'Activating mdev'
+
+	# Serialize hotplug events
+	touch /dev/mdev.seq
+
+	# Setup hotplugging for firmware loading
+	echo /sbin/mdev > /proc/sys/kernel/hotplug
+fi
 
 # Load modules listed in MY_HWOPTS if /lib/modules exists for the running kernel
 if [ -z "${DO_modules}" ]
@@ -310,14 +372,19 @@ else
 	good_msg 'Skipping module load; no modules in the ramdisk!'
 fi
 
+# Ensure that device nodes are properly configured
+if [ "${KV_2_6_OR_GREATER}" ]
+then
+	mdev -s || bad_msg "mdev -s failed"
+fi
+
 # Apply scan delay if specified
 sdelay
 
 # Setup slow USB bits
 setup_slowusb
 
-# Start device manager
-start_dev_mgr
+cd /
 
 # if doslowusb is passed, pause other 10 seconds here, after mdev load
 [ "${DO_slowusb}" ] && sleep 10
@@ -362,7 +429,7 @@ then
 				fi
 
 				if [ ${retval} -ne 0 ]; then
-					RESUME_DEV=$(blkid -l -t "${REAL_RESUME}" | cut -d ":" -f 1 2>/dev/null)
+					RESUME_DEV=$(blkid -o device -l -t "${REAL_RESUME}")
 					retval=$?
 				fi
 
@@ -388,7 +455,7 @@ then
 	good_msg "Making tmpfs for ${NEW_ROOT}"
 	mount -n -t tmpfs tmpfs "${NEW_ROOT}"
 
-	for i in dev mnt mnt/livecd mnt/key tmp tmp/.initrd mnt/gentoo sys
+	for i in dev mnt proc run sys tmp mnt/livecd mnt/key tmp/.initrd mnt/gentoo
 	do
 		mkdir -p "${NEW_ROOT}/${i}"
 		chmod 755 "${NEW_ROOT}/${i}"
@@ -470,7 +537,7 @@ do
 				fi
 
 				if [ ${retval} -ne 0 ]; then
-					ROOT_DEV=$(blkid -l -t "${REAL_ROOT}" | cut -d ":" -f 1 2>/dev/null)
+					ROOT_DEV=$(blkid -o device -l -t "${REAL_ROOT}")
 					retval=$?
 				fi
 
@@ -484,16 +551,24 @@ do
 				fi
 				;;
 			ZFS*)
+				if [ "${USE_ZFS}" = '0' ]; then
+					prompt_user "REAL_ROOT" "root block device"
+					continue
+				fi
+					
 				ROOT_DEV="${REAL_ROOT#*=}"
 				if [ "${ROOT_DEV}" != 'ZFS' ] 
 				then
-					zfs get type ${ROOT_DEV} > /dev/null
-
-					if [ "$?" = '0' ]
+					if [ "$(zfs get type -o value -H ${ROOT_DEV})" = 'filesystem' ]
 					then
 						got_good_root=1;
 						REAL_ROOT=${ROOT_DEV}
 						ROOTFSTYPE=zfs
+					else
+						bad_msg "${ROOT_DEV} is not a filesystem"
+						prompt_user "REAL_ROOT" "root block device"
+						got_good_root=0
+						continue
 					fi
 				else
 					BOOTFS=$(/sbin/zpool list -H -o bootfs)
@@ -515,6 +590,8 @@ do
 						
 						done;
 
+					else
+						got_good_root=0
 					fi
 
 				fi
@@ -561,7 +638,12 @@ do
 
 		if [ "${ROOTFSTYPE}" = 'zfs' ]
 		then
-			MOUNT_STATE=rw
+			if [ "zfs get -H -o value mountpoint ${REAL_ROOT}" = 'legacy' ]
+			then
+				MOUNT_STATE=rw
+			else
+				MOUNT_STATE=rw,zfsutil
+			fi
 		else
 			MOUNT_STATE=ro
 		fi
@@ -587,7 +669,7 @@ do
 		# else not a good root and start over.
 		if [ "$?" = '0' ]
 		then
-			if [ -d ${NEW_ROOT}/dev -a -x ${NEW_ROOT}/sbin/init ] || [ "${REAL_ROOT}" = "/dev/nfs" ]
+			if [ -d ${NEW_ROOT}/dev -a -x "${NEW_ROOT}${REAL_INIT:-/sbin/init}" ] || [ "${REAL_ROOT}" = "/dev/nfs" ]
 			then
 				break
 			else
@@ -621,7 +703,7 @@ then
 	# If encrypted, find key and mount, otherwise mount as usual
 	if [ -n "${CRYPT_ROOT}" ]
 	then
-		CRYPT_ROOT_KEY="$(head -n 1 "${CDROOT_PATH}"/livecd)"
+		CRYPT_ROOT_KEY="$(head -n 1 "${CDROOT_PATH}"/${CDROOT_MARKER})"
 		CRYPT_ROOT='/dev/loop0'
 		good_msg 'You booted an encrypted livecd' "${CRYPT_SILENT}"
 
@@ -783,8 +865,13 @@ then
 		fi
 	done
 
-	mkdir initramfs proc tmp sys 2>/dev/null
+	mkdir initramfs proc tmp sys run 2>/dev/null
 	chmod 1777 tmp
+
+	# have handy /mnt/cdrom (CDROOT_PATH) as well
+	_new_cdroot="${NEW_ROOT}${CDROOT_PATH}"
+	[ ! -d "${_new_cdroot}" ] && mkdir -p "${_new_cdroot}"
+	mount --bind "${CDROOT_PATH}" "${_new_cdroot}"
 
 	fi
 
@@ -824,8 +911,13 @@ for fs in $fslist; do
 	# and not a mountpoint
 	[ -z "$dev" ] && continue
 	fstype=$(get_mount_fstype $fs)
-	# ro must be trailing, and the options will always contain at least 'defaults'
-	opts="$(get_mount_options $fs | strip_mount_options),ro"
+	if get_mount_options $fs | fgrep -q bind ; then
+		opts='bind'
+		dev=${NEW_ROOT}${dev}
+	else
+		# ro must be trailing, and the options will always contain at least 'defaults'
+		opts="$(get_mount_options $fs | strip_mount_options),ro"
+	fi
 	mnt=${NEW_ROOT}${fs}
 	cmd="mount -t $fstype -o $opts $dev $mnt"
 	good_msg "Mounting $dev as ${fs}: $cmd"
@@ -848,7 +940,7 @@ verbose_kmsg
 echo -ne "${GOOD}>>${NORMAL}${BOLD} Booting (initramfs)${NORMAL}"
 
 cd "${CHROOT}"
-mkdir "${CHROOT}/proc" "${CHROOT}/sys" 2>/dev/null
+mkdir "${CHROOT}/proc" "${CHROOT}/sys" "${CHROOT}/run" 2>/dev/null
 echo -ne "${BOLD}.${NORMAL}"
 
 # If devtmpfs is mounted, try move it to the new root

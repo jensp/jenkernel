@@ -221,6 +221,9 @@ LOW-LEVEL COMPILATION OPTIONS
 *--bootdir*=<dir>::
     Set the location of the boot-directory, default is '/boot'.
 
+*--modprobedir*=<dir>::
+    Set the location of the modprobe.d-directory, default is '/etc/modprobe.d'.
+
 *--makeopts*=<makeopts>::
     GNU Make options such as -j2, etc.
 
@@ -259,6 +262,9 @@ INITIALIZATION
 
 *--*[*no-*]*dmraid*::
     Includes or excludes DMRAID support.
+
+*--*[*no-*]*e2fsprogs*::
+    Includes or excludes e2fsprogs.
 
 *--*[*no-*]*zfs*::
     Includes or excludes ZFS support.
@@ -378,8 +384,12 @@ RAMDISK OPTIONS
 The following options can be passed as kernel parameters from the bootloader,
 which the ramdisk scripts would recognize.
 
-*real_root*=<...>::
+*root*=<...>::
     Specifies the device node of the root filesystem to mount.
+
+*real_root*=<...>::
+    Legacy kernel parameter from kernel-2.4 initrd.
+    Does the same as *root*=, which should be used in its place.
 
 *crypt_root*=<...>::
     This specifies the device encrypted by Luks, which contains the
@@ -417,8 +427,12 @@ which the ramdisk scripts would recognize.
 *dodmraid*[=<...>]::
     Activate Device-Mapper RAID and (optionally) pass arguments to it.
 
-*real_init*=<...>::
+*init*=<...>::
     Override location of init script, default is "/sbin/init".
+
+*real_init*=<...>::
+    Legacy kernel parameter from kernel-2.4 initrd.
+    Does the same as *init*=, which should be used in its place.
 
 *init_opts*=<...>::
     Passes arguments to init on bootup.
@@ -451,6 +465,9 @@ which the ramdisk scripts would recognize.
     Scan for bootable ZFS pools on bootup. Optionally force import if
     necessary.
 
+*domultipath*::
+    Activate Multipath on bootup
+
 *doscsi*::
     Activate SCSI devices on bootup, necessary when SCSI support is
     compiled as modules and you're using SCSI or SATA devices.
@@ -463,7 +480,7 @@ which the ramdisk scripts would recognize.
 *keymap*='MAP'::
     Set keymap to 'MAP', e.g. *keymap*=de.
     For valid values of 'MAP' please see
-    '/usr/share/genkernel/defaults/keymaps.tar.gz'.
+    '/usr/share/genkernel/defaults/keymaps/'.
 
 *dokeymap*::
     Use keymap.  Usage of *keymap*= implies this option, already.
@@ -476,10 +493,6 @@ which the ramdisk scripts would recognize.
 *docache*::
 *nocache*::
     Enables/disables caching of CD contents in RAM.
-
-*root*=<...>::
-    Omit or specify as "/dev/ram0".
-    For other values be sure to know what you're doing.
 
 *subdir*=<...>::
     switch_root into "<CHROOT>/<SUBDIR>" instead of "<CHROOT>/".
@@ -507,12 +520,10 @@ which the ramdisk scripts would recognize.
 *console*=<...>::
     Override location of console, default is "/dev/console".
 
-*part*=<...>::
-    Specify part for mdadm to start.  This is the relevant code in mdstart:
-------------------------------------------
-    fd = open("/dev/md<MD_NUMBER>", 0, 0);
-    ioctl(fd, RAID_AUTORUN, <MDPART>);
-------------------------------------------
+*part*[=<0,1>]::
+*partitionable*::
+	Enable/Disable partitionable RAIDs (metadata 0.x) during auto-run.
+	Standalone *part* and *partitionable* keywords for kernel compatability.
 
 *iscsi_initiatorname*=<...>::
 *iscsi_target*=<...>::
@@ -541,18 +552,31 @@ which the ramdisk scripts would recognize.
 *real_resume*=<...>::
 *resume*=<...>::
 *noresume*::
-    TO BE DOCUMENTED
+    *noresume* disables any default resume parameters. *resume* and
+    *real_resume* specify a device via LABEL or UUID to use for for loading a
+    TuxOnICE, SWSUSP or Suspend2 resume image.
 
 *cdroot*[=<...>]::
 *cdroot_type*=<...>::
-    TO BE DOCUMENTED
+*cdroot_marker*=<...>::
+    Used for LiveCDs. *cdroot* without arguments will cause the initramfs to
+    scan all devices for a LiveCD. An argument to *cdroot* will cause it to
+    scan only that device. A LiveCD is any device containing a file with the
+    name & Path of *cdroot_marker* (default of "/livecd"). *cdroot_type*
+    (default of "auto") is the filesystem type to use while mounting devices
+    to check. On success, the LiveCD will be mounted at $CDROOT_PATH.
 
 *loop*=<...>::
 *looptype*=<...>::
-    TO BE DOCUMENTED
+    Used for LiveCDs. After mounting the LiveCD or ISO, look for a file at
+    *loop*=path to use as a loopback image for the main type. Mount it with
+    filesystem type *looptype*. Possible values for *looptype*: normal,
+    squashfs, gcloop, zisofs, noloop, sgimips. If *looptype* is not specified,
+    a guess is made, based on the name or extension of *loop*.
 
 *isoboot*=<...>::
-    TO BE DOCUMENTED
+    Loop-mount an ISO file from the boot device to get the filesystem image.
+    Useful with chain-loading environments and USB keys.
 
 
 NETBOOTING

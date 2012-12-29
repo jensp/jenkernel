@@ -1,9 +1,305 @@
+# After 2012/11/01, the changelog is now auto-generated.
+# This file is for historical purposes only.
 # ChangeLog for genkernel
 # Copyright: 
 # - 2003-2008 Gentoo Foundation
-# - 2008-2011 Various authors (see AUTHORS)
+# - 2008-2012 Various authors (see AUTHORS)
 # Distributed under the GPL v2
-# $Id$
+# $Id: 7902101f65eb47fdc5ed4b116ee234aa23686e1b $
+
+  19 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> gen_bootloader.sh:
+  Missing then keyword.
+
+  15 Oct 2012; Peter Hjalmarsson <xake@rymdraket.net> defaults/linuxrc:
+  Support using init= on the command line.
+
+  15 Oct 2012; Peter Hjalmarsson <xake@rymdraket.net> README,
+  doc/genkernel.8.txt, gen_bootloader.sh, genkernel:
+  Update the documentation to reflect current status re real_root/init.
+
+  15 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> genkernel:
+  Bump to 3.4.44.2 with depmod corner cases by xake.
+
+  15 Oct 2012; Peter Hjalmarsson <xake@rymdraket.net> gen_compile.sh:
+  Fix calling of depmod.
+
+  15 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> genkernel:
+  Bump for 3.4.44.1 with bugfix-only.
+
+  15 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> gen_compile.sh,
+  gen_package.sh:
+  Fix corner cases on OUTPUTDIR.
+
+  14 Oct 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.44
+
+  14 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> gen_cmdline.sh,
+  gen_configkernel.sh, gen_determineargs.sh:
+  Bug #432956: Easy to include VirtIO support in kernel.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> arch/alpha/modules_load,
+  arch/arm/modules_load, arch/ia64/modules_load, arch/mips/modules_load,
+  arch/parisc/modules_load, arch/parisc64/modules_load, arch/ppc/modules_load,
+  arch/ppc64/modules_load, arch/sparc/modules_load, arch/sparc64/modules_load,
+  arch/um/modules_load, arch/x86/modules_load, arch/x86_64/modules_load,
+  defaults/modules_load:
+  Clean up module drift over the years. Just MODULES_CRYPTO left.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> doc/genkernel.8.txt:
+  Document resume parameters.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> arch/alpha/modules_load,
+  arch/arm/modules_load, arch/ia64/modules_load, arch/mips/modules_load,
+  arch/parisc/modules_load, arch/parisc64/modules_load, arch/ppc/modules_load,
+  arch/ppc64/modules_load, arch/sparc/modules_load, arch/sparc64/modules_load,
+  arch/um/modules_load, arch/x86/modules_load, arch/x86_64/modules_load,
+  defaults/initrd.scripts, defaults/linuxrc, defaults/modules_load,
+  gen_configkernel.sh, gen_initramfs.sh:
+  Bug #286187: Complete multipath support.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> defaults/initrd.defaults,
+  defaults/initrd.scripts, defaults/linuxrc, doc/genkernel.8.txt:
+  Bug #351873: More livecd control, and initramfs livecd argument
+  documentation.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> arch/alpha/kernel-config,
+  arch/ppc/kernel-config, arch/x86/kernel-config, arch/x86_64/kernel-config,
+  defaults/kernel-config:
+  Bug #336170: amd74xx was long-replaced by pata_amd. The old driver is
+  problematic, as even with the pata_amd module loaded, it will not release the
+  device. Disable the old driver on remaining platforms, add pata_amd where
+  missing & needed (not alpha).
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> gen_initramfs.sh:
+  Bug #414581: ensure built-in initramfs compress config options are set to
+  avoid silentoldconfig bailing out.
+
+  13 Oct 2012; Łukasz Stelmach <stlman@poczta.fm> gen_cmdline.sh,
+  gen_compile.sh, gen_configkernel.sh, gen_determineargs.sh, gen_funcs.sh,
+  genkernel:
+  Bug #435210 support external kernel output location, to allow pristine
+  source.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> gen_compile.sh:
+  Bug #397947: Run depmod on new modules to avoid need to run at every boot on
+  unionfs systems, or systemd that never runs it.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> gen_initramfs.sh:
+  Put the version of genkernel used in a build into /etc/build_id.
+
+  13 Oct 2012; Robin H. Johnson <robbat2@gentoo.org> defaults/linuxrc:
+  Extra creation of /run in the LiveCD scope, before any union/aufs mount.
+
+  03 Oct 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.43
+
+  03 Oct 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Use actual kernel config for check of available compression methods (bug
+  #436820)
+
+  03 Oct 2012; Dustin Frisch <dustin.frisch@gmail.com> defaults/linuxrc:
+  With boot parameter real_init=/foo look for ${NEW_ROOT}/foo, not
+  ${NEW_ROOT}/sbin/init (bug #437080)
+
+  23 Sep 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Append e2fsck and mke2fs to initramfs. Original patch by Rick Farina
+
+  10 Sep 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.42
+
+  10 Sep 2012; Sebastian Pipping <sping@gentoo.org>
+  +patches/busybox/1.20.2/busybox-1.20.2-glibc-sys-resource.patch:
+  Add busybox 1.20.2 patch: busybox-1.20.2-glibc-sys-resource.patch
+
+  10 Sep 2012; Sebastian Pipping <sping@gentoo.org>
+  +patches/busybox/1.20.2/1.18.1-openvt.diff,
+  +patches/busybox/1.20.2/busybox-1.7.4-signal-hack.patch,
+  +patches/busybox/1.20.2/busybox-1.20.1-mdstart.patch:
+  Copy busybox patches from 1.20.1 to 1.20.2
+
+  30 Aug 2012; Fabio Erculiani <lxnay@gentoo.org> defaults/linuxrc:
+  mount /mnt/cdrom inside target chroot even when aufs/unionfs is disabled
+
+  14 Aug 2012; Richard Yao <ryao@gentoo.org> genkernel:
+  Bump version to 3.4.41
+
+  12 Aug 2012; Sebastian Pipping <sping@gentoo.org> +defaults/software.sh,
+  genkernel.conf:
+  Move software version defaults for defaults/software.sh to ease the
+  etc-update game
+
+  12 Aug 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Fix parsing of --config=... command line option
+
+  27 Jul 2012; Sebastian Pipping <sping@gentoo.org> defaults/initrd.scripts,
+  genkernel:
+  Bump version to 3.4.40
+
+  24 Jul 2012; Robin H. Johnson <robbat2@gentoo.org> defaults/initrd.scripts:
+  Flip awk return values.
+
+  24 Jul 2012; Robin H. Johnson <robbat2@gentoo.org> defaults/initrd.scripts:
+  Minor thinko in devpts check.
+
+  24 Jul 2012; Robin H. Johnson <robbat2@gentoo.org> defaults/initrd.scripts:
+  Prior commit to only mount devtmpfs and devpts if they were not already
+  mounted made assumptions about the device names they were mounted as. Check
+  the filesystem column of /proc/mounts instead.
+
+  21 Jul 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.39
+
+  17 Jul 2012; Robin H. Johnson <robbat2@gentoo.org> arch/x86_64/kernel-config:
+  Bug #399703: amd64 default kernel config did not have EFI support.
+  
+  15 July 2012; Robin H. Johnson <robbat2@gentoo.org> doc/genkernel.8.txt,
+  Document the isoboot option, as designed for GRUB2 usage 3 years ago.
+
+  09 Jul 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.38
+
+  09 Jul 2012; Sebastian Pipping <sping@gentoo.org> gen_compile.sh:
+  Fix linking of unionfs-fuse 0.24
+
+  09 Jul 2012; Sebastian Pipping <sping@gentoo.org>
+  patches/fuse/2.8.6/fuse-2.8.6-glibc-2.14.patch:
+  Allow compilation of FUSE 2.8.6 with glibc 2.14 (bug #425080)
+
+  09 Jul 2012; Sebastian Pipping <sping@gentoo.org> defaults/initrd.scripts:
+  Restore previous handling of real_root due to report of regressions (bug
+  #419965)
+
+  08 Jul 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.37
+
+  08 Jul 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh,
+  genkernel:
+  Always report used kernel config file
+
+  08 Jul 2012; Sebastian Pipping <sping@gentoo.org> gen_configkernel.sh,
+  gen_initramfs.sh:
+  Catch case with no initramfs compression supported by kernel (bug #423847)
+
+  08 Jul 2012; Sebastian Pipping <sping@gentoo.org> gen_configkernel.sh,
+  gen_initramfs.sh:
+  Fix detection of initramfs compression with bzip2 as best candidate
+
+  08 Jul 2012; Sebastian Pipping <sping@gentoo.org> arch/x86/modules_load,
+  arch/x86_64/modules_load, defaults/modules_load:
+  Add xts to MODULES_CRYPTO (bug #425028)
+
+  01 Jul 2012; Sebastian Pipping <sping@gentoo.org> gen_configkernel.sh,
+  gen_package.sh:
+  Support --kernel-config=/proc/config.gz (bug #421027)
+
+  08 Jul 2012; Kenny Cheng <kenny97821419@gmail.com> defaults/linuxrc:
+  Add /run to support openrc >=0.10 (bug #425180)
+
+  11 Jun 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.36
+
+  11 Jun 2012; Sebastian Pipping <sping@gentoo.org> defaults/initrd.scripts:
+  Respect real_root for plain dm-crypt without LVM (bug #419965)
+
+  10 Jun 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.35
+
+  10 Jun 2012; Sebastian Pipping <sping@gentoo.org>
+  +patches/busybox/1.20.1/1.18.1-openvt.diff,
+  +patches/busybox/1.20.1/busybox-1.7.4-signal-hack.patch,
+  +patches/busybox/1.20.1/busybox-1.20.1-mdstart.patch:
+  Support busybox 1.20.1 (bug #419511)
+
+  04 Jun 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.34
+
+  02 Jun 2012; Sebastian Pipping <sping@gentoo.org> defaults/linuxrc:
+  Support bind mounts from /etc/initramfs.mounts (bug #418463)
+
+  02 Jun 2012; Sebastian Pipping <sping@gentoo.org> arch/x86/modules_load,
+  arch/x86_64/modules_load, defaults/modules_load:
+  Make sure that cbc.ko and aes*.ko needed for cbc-essiv:sha256 (=default) disk
+  encryption are included with the initramfs (bug #416973)
+
+  28 May 2012; Sebastian Pipping <sping@gentoo.org> gen_funcs.sh:
+  Fix an e2fsprogs compilation leftover (bug #417095), reported by Juergen Rose
+
+  17 May 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump to 3.4.33.1
+
+  17 May 2012; Sebastian Pipping <sping@gentoo.org> defaults/linuxrc:
+  Fix call to blkid as "blkid -l -t UUID=foo" (without -o device) does not seem
+  to work well with blkid of util-linux
+
+  17 May 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.33
+
+  17 May 2012; Sebastian Pipping <sping@gentoo.org>
+  -patches/e2fsprogs/1.42/e2fsprogs-1.41.12-getpagesize.patch, gen_compile.sh,
+  gen_initramfs.sh, genkernel, genkernel.conf:
+  Use blkid from system's util-linux rather than compiling e2fsprogs ourselves
+
+  14 May 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.32
+
+  14 May 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Stop removing lvm/dmsetup from the initramfs (bug #415697), reported by
+  I.zaufi, bug introduced in 9f36ecc125bf2c20bd28c0ad513577a858140a77 affects
+  genkernel >=3.4.30
+
+  12 May 2012; Sebastian Pipping <sping@gentoo.org> arch/x86/kernel-config,
+  arch/x86_64/kernel-config, defaults/kernel-config:
+  Set CONFIG_DEVTMPFS=y on x86, x86_64, default for udev
+
+  12 May 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.31
+
+  18 Apr 2012; Robin H. Johnson <robbat2@gentoo.org> gen_initramfs.sh:
+  lddtree call must be outside the for loop.
+
+  16 Apr 2012; Robin H. Johnson <robbat2@gentoo.org> gen_initramfs.sh:
+  Use CC0 instead of public domain for copy_binaries to cover French
+  jurisdiction concerns.
+
+  16 Apr 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.30
+
+  16 Apr 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Support a non-static cryptsetup binary (bug #409277)
+ 
+  15 Apr 2012; Robin H. Johnson <robbat2@gentoo.org> gen_initramfs.sh:
+  Release copy_binaries function as public domain.
+
+  15 Apr 2012; Robin H. Johnson <robbat2@gentoo.org> gen_initramfs.sh:
+  Handle other binary paths for LVM.
+
+  09 Apr 2012; Sebastian Pipping <sping@gentoo.org> defaults/initrd.scripts,
+  defaults/keymaps/keymapList, defaults/keymaps/sf.map:
+  Add keymap "sf" from Pentoo
+
+  08 Apr 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
+  Bump version to 3.4.29
+
+  08 Apr 2012; Mike Auty <ikelos@gentoo.org> gen_bootloader.sh:
+  Support for Grub 2, adjustements by Tomasz Wasiak
+
+  08 Apr 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh,
+  genkernel.conf:
+  Add "fastest" to supported initrd compressions
+
+  08 Apr 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Support comression "lzop" (not just "lzo") as wrongly advertised by comments
+  in genkernel.conf before
+
+  08 Apr 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Be more helpful when requested compression is not available
+
+  08 Apr 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Error out on unknown initrd compression, reported by Peter Gantner (bug
+  #411197)
+
+  08 Apr 2012; Sebastian Pipping <sping@gentoo.org> gen_initramfs.sh:
+  Fix initrd compression "gzip", reported by Peter Gantner (bug #411197)
 
   30 Mar 2012; Sebastian Pipping <sping@gentoo.org> genkernel:
   Bump version to 3.4.28
