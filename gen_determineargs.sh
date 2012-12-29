@@ -151,7 +151,6 @@ determine_real_args() {
 	FUSE_BINCACHE=`cache_replace "${FUSE_BINCACHE}"`
 	UNIONFS_FUSE_BINCACHE=`cache_replace "${UNIONFS_FUSE_BINCACHE}"`
 	GPG_BINCACHE=`cache_replace "${GPG_BINCACHE}"`
-	DROPBEAR_BINCACHE=`cache_replace "${DROPBEAR_BINCACHE}"`
 
 	DEFAULT_KERNEL_CONFIG=`arch_replace "${DEFAULT_KERNEL_CONFIG}"`
 	BUSYBOX_CONFIG=`arch_replace "${BUSYBOX_CONFIG}"`
@@ -164,7 +163,6 @@ determine_real_args() {
 	FUSE_BINCACHE=`arch_replace "${FUSE_BINCACHE}"`
 	UNIONFS_FUSE_BINCACHE=`arch_replace "${UNIONFS_FUSE_BINCACHE}"`
 	GPG_BINCACHE=`arch_replace "${GPG_BINCACHE}"`
-	DROPBEAR_BINCACHE=`arch_replace "${DROPBEAR_BINCACHE}"`
 
 	if [ -n "${CMD_BOOTLOADER}" ]
 	then

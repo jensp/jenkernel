@@ -522,40 +522,6 @@ compile_mdadm() {
 	fi
 }
 
-compile_dropbear() {
-	if [ ! -f "${DROPBEAR_BINCACHE}" ]
-	then
-		[ -f "${DROPBEAR_SRCTAR}" ] ||
-			gen_die "Could not find Dropbear source tarball: ${DROPBEAR_SRCTAR}! Please place it there, or place another version, changing /etc/genkernel.conf as necessary!"
-		cd "${TEMP}"
-		rm -rf ${DROPBEAR_DIR} > /dev/null
-                /bin/tar -jxpf ${DROPBEAR_SRCTAR} ||
-                        gen_die 'Could not extract DROPBEAR source tarball!'
-                [ -d "${DROPBEAR_DIR}" ] ||
-                        gen_die "DROPBEAR directory ${DROPBEAR_DIR} is invalid!"
-		cd "${DROPBEAR_DIR}"
-		echo "DROPBEARDIR: $(pwd)"
-		print_info 1 'dropbear: >> Configuring...'
-		./configure >> ${LOGFILE} 2>&1 ||
-			gen_die 'Configure of dmraid failed!'
-		print_info 1 'dmraid: >> Compiling...'
-		compile_generic '' utils ||
-			gen_die 'Dropbear compile failed'
-		echo "Compile successful"
-		mkdir -p "${TEMP}/dropbear/sbin" ||
-			gen_die "Dropbear install dir failed. PWD: $(pwd)"
-		install -m 0755 -s dropbear "${TEMP}/dropbear/sbin/dropbear" ||
-			gen_die 'Dropbear install failed'
-                print_info 1 '      >> Copying to bincache...'
-                cd "${TEMP}/dropbear"
-                /bin/tar -cjf "${DROPBEAR_BINCACHE}" sbin/dropbear ||
-                        gen_die "Could not create binary cache: ${DROPBEAR_BINCACHE}"
-                cd "${TEMP}"
-                rm -rf "${TEMP}/dropbear" > /dev/null
-                rm -rf "${DROPBEAR_DIR}" dropbear
-	fi
-}
-
 compile_dmraid() {
 	compile_device_mapper
 	if [ ! -f "${DMRAID_BINCACHE}" ]
