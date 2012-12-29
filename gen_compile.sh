@@ -540,16 +540,17 @@ compile_dropbear() {
 			gen_die 'Configure of dmraid failed!'
 		print_info 1 'dmraid: >> Compiling...'
 		export STATIC=1
-		compile_generic '' utils ||
+		MAKEOPTS="${MAKEOPTS} -j1" compile_generic '' utils ||
 			gen_die 'Dropbear compile failed'
 		echo "Compile successful"
-		mkdir -p "${TEMP}/dropbear/sbin" ||
-			gen_die "Dropbear install dir failed. PWD: $(pwd)"
+		mkdir -p "${TEMP}/dropbear/sbin" "${TEMP}/dropbear/etc/dropbear"
+		dropbearkey -t dss -f "${TEMP}/dropbear/etc/dropbear/dropbear_dss_host_key"
+		dropbearkey -t rsa -f "${TEMP}/dropbear/etc/dropbear/dropbear_rsa_host_key"
 		install -m 0755 -s dropbear "${TEMP}/dropbear/sbin/dropbear" ||
 			gen_die 'Dropbear install failed'
                 print_info 1 '      >> Copying to bincache...'
                 cd "${TEMP}/dropbear"
-                /bin/tar -cjf "${DROPBEAR_BINCACHE}" sbin/dropbear ||
+                /bin/tar -cjf "${DROPBEAR_BINCACHE}" sbin/dropbear etc/dropbear ||
                         gen_die "Could not create binary cache: ${DROPBEAR_BINCACHE}"
                 cd "${TEMP}"
                 rm -rf "${TEMP}/dropbear" > /dev/null
