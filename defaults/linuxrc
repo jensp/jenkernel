@@ -63,10 +63,11 @@ CMDLINE=$(cat /proc/cmdline)
 # Scan CMDLINE for any specified real_root= or cdroot arguments
 FAKE_ROOT=''
 FAKE_INIT=''
-REAL_ROOTFLAGS=''
+FAKE_ROOTFLAGS=''
 INIT_OPTS=''
 ROOTFSTYPE='auto'
 CRYPT_SILENT=0
+QUIET=''
 
 mkdir -p /etc/cmdline /etc/modprobe.d
 for x in ${CMDLINE}
@@ -143,6 +144,9 @@ do
 			then
 				ZPOOL_FORCE=-f
 			fi
+		;;
+		quiet)
+			QUIET=1
 		;;
 		# Debug Options
 		debug)
@@ -262,6 +266,9 @@ do
 		real_rootflags=*)
 			REAL_ROOTFLAGS=${x#*=}
 		;;
+		rootflags=*)
+			FAKE_ROOTFLAGS=${x#*=}
+		;;
 		rootfstype=*)
 			ROOTFSTYPE=${x#*=}
 		;;
@@ -283,23 +290,25 @@ do
 		nounionfs)
 			USE_UNIONFS_NORMAL=0
 			;;
-		*=*)
-			case "${x%%=*}" in
-			*.*)
-				echo "${x#*.}" >> "/etc/module_options/${x%%.*}.conf"
-			;;
-			esac
-		;;
 	esac
 done
 
-if [ -z "${REAL_ROOT}" -a \( "${CDROOT}" = '0' \)  -a \( "${FAKE_ROOT}" != "/dev/ram0" \) ]
+quiet_kmsg
+
+if [ "${CDROOT}" = '0' ]
 then
-	REAL_ROOT="${FAKE_ROOT}"
-fi
-if [ -z "${REAL_INIT}" -a \( "${CDROOT}" = '0' \)  -a \( "${FAKE_INIT}" != "/linuxrc" \) ]
-then
-	REAL_INIT="${FAKE_INIT}"
+	if [ -z "${REAL_ROOT}" -a "${FAKE_ROOT}" != "/dev/ram0" ]
+	then
+		REAL_ROOT="${FAKE_ROOT}"
+	fi
+	if [ -z "${REAL_INIT}" -a "${FAKE_INIT}" != "/linuxrc" ]
+	then
+		REAL_INIT="${FAKE_INIT}"
+	fi
+	if [ -z "${REAL_ROOTFLAGS}" ]
+	then
+		REAL_ROOTFLAGS="${FAKE_ROOTFLAGS}"
+	fi
 fi
 
 # Set variables based on the value of REAL_ROOT
@@ -317,16 +326,15 @@ esac
 # Verify that it is safe to use ZFS
 if [ "USE_ZFS" = "1" ]
 then
-	if [ -x /sbin/zfs -a -x /sbin/zpool ]
-	then
-		MY_HWOPTS="${MY_HWOPTS} zfs"
-	else
-		USE_ZFS=0
-
-		[ -x /sbin/zfs ] || bad_msg '/sbin/zfs not found!'
-		[ -x /sbin/zpool ] || bad_msg '/sbin/zpool not found!'
-		bad_msg 'Aborting use of zfs!'
-	fi
+	for i in /sbin/zfs /sbin/zpool
+	do
+		if [ ! -x ${i} ]
+		then
+			USE_ZFS=0
+			bad_msg 'Aborting use of zfs because ${i} not found!'
+			break
+		fi
+	done
 fi
 
 splash 'init'
@@ -340,16 +348,13 @@ mount_devfs
 mount_sysfs
 
 # Initialize mdev
-if [ "${KV_2_6_OR_GREATER}" ]
-then
-	good_msg 'Activating mdev'
+good_msg 'Activating mdev'
 
-	# Serialize hotplug events
-	touch /dev/mdev.seq
+# Serialize hotplug events
+touch /dev/mdev.seq
 
-	# Setup hotplugging for firmware loading
-	echo /sbin/mdev > /proc/sys/kernel/hotplug
-fi
+# Setup hotplugging for firmware loading
+echo /sbin/mdev > /proc/sys/kernel/hotplug
 
 # Load modules listed in MY_HWOPTS if /lib/modules exists for the running kernel
 if [ -z "${DO_modules}" ]
@@ -373,21 +378,12 @@ else
 fi
 
 # Ensure that device nodes are properly configured
-if [ "${KV_2_6_OR_GREATER}" ]
-then
-	mdev -s || bad_msg "mdev -s failed"
-fi
+mdev -s || bad_msg "mdev -s failed"
 
 # Apply scan delay if specified
 sdelay
 
-# Setup slow USB bits
-setup_slowusb
-
 cd /
-
-# if doslowusb is passed, pause other 10 seconds here, after mdev load
-[ "${DO_slowusb}" ] && sleep 10
 
 # Start iSCSI
 if [ -e /bin/iscsistart ]
@@ -448,7 +444,7 @@ mkdir -p "${NEW_ROOT}"
 CHROOT="${NEW_ROOT}"
 
 # Run debug shell if requested
-rundebugshell
+rundebugshell "before setting up the root filesystem"
 
 if [ "${CDROOT}" = '1' ]
 then
@@ -485,17 +481,13 @@ then
 
 	if [ "${REAL_ROOT}" = '' ]
 	then
-		echo -n -e "${WARN}>>${NORMAL}${BOLD} No bootable medium found. Waiting for new devices"
-
+		warn_msg "No bootable medium found. Waiting for new devices..."
 		COUNTER=0
 		while [ ${COUNTER} -lt 3 ]; do
 			sleep 3
-			echo -n '.'
 			let COUNTER=${COUNTER}+1
 		done
-
 		sleep 1
-		echo -e "${NORMAL}"
 		bootstrapCD
 	fi
 
@@ -937,43 +929,45 @@ fi
 
 verbose_kmsg
 
-echo -ne "${GOOD}>>${NORMAL}${BOLD} Booting (initramfs)${NORMAL}"
+good_msg "Booting (initramfs)"
 
 cd "${CHROOT}"
 mkdir "${CHROOT}/proc" "${CHROOT}/sys" "${CHROOT}/run" 2>/dev/null
-echo -ne "${BOLD}.${NORMAL}"
 
 # If devtmpfs is mounted, try move it to the new root
-# If that fails, try to unmount all possible mounts of devtmpfs as stuff breaks otherwise
+# If that fails, try to unmount all possible mounts of
+# devtmpfs as stuff breaks otherwise
 for fs in /dev /sys /proc
 do
 	if grep -qs "$fs" /proc/mounts
 	then
 		if ! mount --move $fs "${CHROOT}"$fs
 		then
-			umount $fs || echo '*: Failed to move and unmount the ramdisk $fs!'
+			umount $fs || \
+			bad_msg "Failed to move and unmount the ramdisk $fs!"
 		fi
 	fi
 done
 
 if [ ! -e "${CHROOT}/dev/console" ] || [ ! -e "${CHROOT}/dev/null" ]
 then
-	echo -ne "${BAD}>>${NORMAL}${BOLD} ERROR: your real /dev is missing files required to boot (console and null)${NORMAL}"
+	bad_msg "ERROR: your real /dev is missing console and null"
 elif [ -e /etc/initrd.splash -a ! -e "${CHROOT}/dev/tty1" ]
 then
-	echo -ne "${BAD}>>${NORMAL}${BOLD} ERROR: your real /dev is missing tty1, which is required for splash${NORMAL}"
+	bad_msg "ERROR: your real /dev is missing tty1, required for splash"
 fi
 
-echo -e "${BOLD}.${NORMAL}"
+# Run debug shell if requested
+rundebugshell "before entering switch_root"
 
 exec /sbin/switch_root -c "/dev/console" "${CHROOT}" "${REAL_INIT:-/sbin/init}" "${INIT_OPTS}"
 
 # If we get here, something bad has happened
 splash 'verbose'
 
-echo "A fatal error has probably occured since ${REAL_INIT:-/sbin/init} did not"
-echo "boot correctly. Trying to open a shell..."
-echo
+bad_msg "A fatal error has occured since ${REAL_INIT:-/sbin/init} did not"
+bad_msg "boot correctly. Trying to open a shell..."
+
 exec /bin/bash
 exec /bin/sh
 exec /bin/ash

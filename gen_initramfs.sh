@@ -33,9 +33,15 @@ copy_binaries() {
 		fi
 	done
 	# This must be OUTSIDE the for loop, we only want to run lddtree etc ONCE.
-	lddtree "$@" \
+	# lddtree does not have the -V (version) nor the -l (list) options prior to version 1.18
+	(
+	if lddtree -V > /dev/null 2>&1 ; then
+		lddtree -l "$@"
+	else
+		lddtree "$@" \
 			| tr ')(' '\n' \
-			| awk  '/=>/{ if($3 ~ /^\//){print $3}}' \
+			| awk  '/=>/{ if($3 ~ /^\//){print $3}}'
+	fi ) \
 			| sort \
 			| uniq \
 			| cpio -p --make-directories --dereference --quiet "${destdir}" \
@@ -114,9 +120,23 @@ append_busybox() {
 	chmod +x "${TEMP}/initramfs-busybox-temp/usr/share/udhcpc/default.script"
 
 	# Set up a few default symlinks
-	for i in ${BUSYBOX_APPLETS:-[ ash sh mount uname echo cut cat}; do
-		rm -f ${TEMP}/initramfs-busybox-temp/bin/$i > /dev/null
+	local default_applets="[ ash sh mount uname echo cut cat"
+	for i in ${BUSYBOX_APPLETS:-${default_applets}}; do
+		rm -f ${TEMP}/initramfs-busybox-temp/bin/$i
 		ln -s busybox ${TEMP}/initramfs-busybox-temp/bin/$i ||
+			gen_die "Busybox error: could not link ${i}!"
+	done
+
+	local mod_applets="sbin/modprobe sbin/insmod sbin/rmmod bin/lsmod"
+	local dir=
+	local name=
+	for i in ${mod_applets}; do
+		dir=$(dirname $i)
+		name=$(basename $i)
+		rm -f ${TEMP}/initramfs-busybox-temp/$dir/$name
+		mkdir -p ${TEMP}/initramfs-busybox-temp/$dir ||
+			gen_die "Busybox error: could not create dir: $dir"
+		ln -s ../bin/busybox ${TEMP}/initramfs-busybox-temp/$dir/$name ||
 			gen_die "Busybox error: could not link ${i}!"
 	done
 
@@ -404,17 +424,21 @@ append_zfs(){
 		rm -r "${TEMP}/initramfs-zfs-temp"
 	fi
 
-	mkdir -p "${TEMP}/initramfs-zfs-temp/etc/zfs/"
+	mkdir -p "${TEMP}/initramfs-zfs-temp/etc/zfs"
 
 	# Copy files to /etc/zfs
-	for i in /etc/zfs/{zdev.conf,zpool.cache}
+	for i in zdev.conf zpool.cache
 	do
-		cp -a "${i}" "${TEMP}/initramfs-zfs-temp/etc/zfs" \
-			|| print_warning 1 "Could not copy file ${i} for ZFS"
+		if [ -f /etc/zfs/${i} ]
+		then
+			print_info 1 "        >> Including ${i}"
+			cp -a "/etc/zfs/${i}" "${TEMP}/initramfs-zfs-temp/etc/zfs" 2> /dev/null \
+				|| gen_die "Could not copy file ${i} for ZFS"
+		fi
 	done
 
 	# Copy binaries
-	copy_binaries "${TEMP}/initramfs-zfs-temp" /sbin/{mount.zfs,zfs,zpool}
+	copy_binaries "${TEMP}/initramfs-zfs-temp" /sbin/{mount.zfs,zdb,zfs,zpool}
 
 	cd "${TEMP}/initramfs-zfs-temp/"
 	log_future_cpio_content
@@ -605,24 +629,8 @@ append_modprobed() {
 		rm -r "${TDIR}"
 	fi
 
-	mkdir -p "${TDIR}/etc/module_options/"
-
-	# Load module parameters
-	for dir in $(find "${MODPROBEDIR}"/*)
-	do
-		while read x
-		do
-			case "${x}" in
-				options*)
-					module_name="$(echo "$x" | cut -d ' ' -f 2)"
-					[ "${module_name}" != "$(echo)" ] || continue
-					module_options="$(echo "$x" | cut -d ' ' -f 3-)"
-					[ "${module_options}" != "$(echo)" ] || continue
-					echo "${module_options}" >> "${TDIR}/etc/module_options/${module_name}.conf"
-				;;
-			esac
-		done < "${dir}"
-	done
+	mkdir -p "${TDIR}/etc"
+	cp -r "/etc/modprobe.d" "${TDIR}/etc/modprobe.d"
 
 	cd "${TDIR}"
 	log_future_cpio_content
@@ -699,12 +707,6 @@ append_auxilary() {
 	done
 	echo '"' >> "${TEMP}/initramfs-aux-temp/etc/initrd.defaults"
 
-	if [ -f "${GK_SHARE}/arch/${ARCH}/modprobe" ]
-	then
-		cp "${GK_SHARE}/arch/${ARCH}/modprobe" "${TEMP}/initramfs-aux-temp/sbin/modprobe"
-	else
-		cp "${GK_SHARE}/defaults/modprobe" "${TEMP}/initramfs-aux-temp/sbin/modprobe"
-	fi
 	if isTrue $CMD_DOKEYMAPAUTO
 	then
 		echo 'MY_HWOPTS="${MY_HWOPTS} keymap"' >> ${TEMP}/initramfs-aux-temp/etc/initrd.defaults
@@ -722,7 +724,6 @@ append_auxilary() {
 	chmod +x "${TEMP}/initramfs-aux-temp/init"
 	chmod +x "${TEMP}/initramfs-aux-temp/etc/initrd.scripts"
 	chmod +x "${TEMP}/initramfs-aux-temp/etc/initrd.defaults"
-	chmod +x "${TEMP}/initramfs-aux-temp/sbin/modprobe"
 
 	if isTrue ${NETBOOT}
 	then
@@ -798,6 +799,20 @@ create_initramfs() {
 	then
 		append_data 'overlay'
 	fi
+
+	# Finalize cpio by removing duplicate files
+	print_info 1 "        >> Finalizing cpio..."
+	local TDIR="${TEMP}/initramfs-final"
+	mkdir -p "${TDIR}"
+	cd "${TDIR}"
+
+	cpio --quiet -i -F "${CPIO}" 2> /dev/null \
+		|| gen_die "extracting cpio for finalization"
+	find . -print | cpio ${CPIO_ARGS} -F "${CPIO}" 2>/dev/null \
+		|| gen_die "recompressing cpio"
+
+	cd "${TEMP}"
+	rm -r "${TDIR}"
 
 	if isTrue "${INTEGRATED_INITRAMFS}"
 	then

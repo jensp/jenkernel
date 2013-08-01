@@ -2,8 +2,20 @@
 
 . /etc/initrd.defaults
 
-backup() {
-	echo -ne "\033[0G\033[0K"
+call_func_timeout()
+{
+	local func=$1 timeout=$2 pid watcher
+	[ $# -ne 2 ] && gen_die "call_func_timeout() called with $# arguments"
+
+	( ${func} ) & pid=$!
+	( sleep ${timeout} && kill -HUP ${pid} ) 2>/dev/null & watcher=$!
+	if wait ${pid} 2>/dev/null; then
+	    kill -HUP $watcher 2> /dev/null
+	    wait $watcher 2>/dev/null
+	    return 1
+	fi
+
+	return 0
 }
 
 modules_load() {
@@ -17,30 +29,42 @@ modules_load() {
 
 modules_scan() {
 	local MODS
-	[ -d "/etc/modules/${1}" ] || touch /etc/modules/${1}
+	local loaded
 
-	[ -f "/etc/modules/${1}" ] && MODS=`cat /etc/modules/${1}`
+	MODS=$(cat /etc/modules/${1} 2>/dev/null)
+	[ -n "${MODS}" ] && [ -z "${QUIET}" ] && \
+		echo -ne "${BOLD}   ::${NORMAL} Loading from ${1}: "
+
 	for x in ${MODS}
 	do
-		MLOAD=`echo ${MLIST} | sed -e "s/.*${x}.*/${x}/"`
+		MLOAD=$(echo ${MLIST} | sed -e "s/.*${x}.*/${x}/")
 		if [ "${MLOAD}" = "${x}" ] # Only module to no-load
 		then
-			echo -e "${BOLD}   ::${NORMAL} Skipping ${x}..."
-		elif [ "${MLOAD}" = "${MLIST}" ] # == No change == No specified no-load
+			[ -z "${QUIET}" ] && \
+				echo -e "${BOLD}   ::${NORMAL} Skipping ${x}..."
+		elif [ "${MLOAD}" = "${MLIST}" ]
 		then
-			[ -n "${DEBUG}" ] && echo -ne "${BOLD}   ::${NORMAL} Checking for ${x}..."
-			# find -name does not work since the return status is always zero
-			if find /lib/modules/${KV} | grep /"${x}${KSUFF}" >/dev/null 2>&1
-			then
-				echo -ne "${BOLD}   ::${NORMAL} Scanning for ${x}..."
-				modprobe ${x} -n
-				backup
-				echo -ne "${NORMAL}"
+			if [ -n "${DEBUG}" ]; then
+				echo -ne "${BOLD}   ::${NORMAL} "
+				echo -ne "Scanning for ${x}..."
 			fi
+			modprobe ${x} > /dev/null 2>&1
+			loaded=${?}
+
+			[ -n "${DEBUG}" -a "${loaded}" = "0" ] && \
+				echo "loaded"
+			[ -n "${DEBUG}" -a "${loaded}" != "0" ] && \
+				echo "not loaded"
+
+			[ -z "${DEBUG}" -a "${loaded}" = "0" ] && \
+				[ -z "${QUIET}" ] && \
+				echo -en "${x} "
 		else
-			echo -e "${BOLD}   ::${NORMAL} Skipping ${x}..."
+			[ -z "${QUIET}" ] && \
+				echo -e "${BOLD}   ::${NORMAL} Skipping ${x}..."
 		fi
 	done
+	[ -n "${MODS}" ] && [ -z "${QUIET}" ] && echo
 }
 
 uppercase(){
@@ -154,12 +178,15 @@ devicelist(){
 }
 
 bootstrapCD() {
-	local DEVICES=`devicelist`
-	# The device was specified on the command line, so there's no need to scan
-	# a bunch of extra devices
-	[ -n "${CDROOT_DEV}" ] && DEVICES="${CDROOT_DEV}"
+	local DEVICES=
 
-	findmediamount "cdrom" "${SUBDIR}/${CDROOT_MARKER}" "REAL_ROOT" "${CDROOT_PATH}" ${DEVICES}
+	# The device was specified on the command line, so there's no need
+	# to scan a bunch of extra devices
+	[ -n "${CDROOT_DEV}" ] && DEVICES="${CDROOT_DEV}"
+	[ -z "${CDROOT_DEV}" ] && DEVICES=$(devicelist)
+
+	findmediamount "cdrom" "${SUBDIR}/${CDROOT_MARKER}" \
+		"REAL_ROOT" "${CDROOT_PATH}" ${DEVICES}
 }
 
 bootstrapKey() {
@@ -371,7 +398,9 @@ test_success() {
 # $1 string
 # $2 hide flag
 
-good_msg() {	
+good_msg() {
+	[ -n "${QUIET}" ] && [ -z "${DEBUG}" ] && return 0
+
 	msg_string=$1
 	msg_string="${msg_string:-...}"
 	[ "$2" != 1 ] && echo -e "${GOOD}>>${NORMAL}${BOLD} ${msg_string} ${NORMAL}"
@@ -417,13 +446,16 @@ prompt_user(){
 
 	eval local oldvalue='$'${1}
 
-	[ \( $# != 2 \) -a \( $# != 3 \) ] && \
-		bad_msg "Bad invocation of function prompt_user, please file a bug \
-		report with this message" && exit 1
+	[ $# != 2 -a $# != 3 ] && \
+		bad_msg "Bad invocation of function prompt_user."
+		bad_msg "Please file a bug report with this message" && exit 1
 	[ -n "${3}" ] && local explnt=" or : ${3}" || local explnt="."
-	
+
 	bad_msg "Could not find the ${2} in ${oldvalue}${explnt}"
-	echo '   Please specify another value or: press Enter for the same, type "shell" for a shell, or "q" to skip...'
+	bad_msg "Please specify another value or:"
+	bad_msg "- press Enter for the same"
+	bad_msg '- type "shell" for a shell'
+	bad_msg '- type "q" to skip...'
 	echo -n "${2}(${oldvalue}) :: "
 	read ${1}
 	case `eval echo '$'${1}` in
@@ -434,34 +466,13 @@ prompt_user(){
 			;;
 		'shell')
 			eval ${1}'='${oldvalue}
-			echo "To leave and try again just press <Ctrl>+D"
+			warn_msg "To leave and try again just press <Ctrl>+D"
 			run_shell
 			;;
 		'')
 			eval ${1}'='${oldvalue}
 			;;
 	esac
-}
-
-setup_slowusb() {
-	# This function removes unset DO_slowusb if there is no usb-storage attached.
-	# If noslowusb is set, skip this function
-	[ "${DO_slowusb}" ] || return
-
-	# Unset DO_slowusb, so we can set it again if usb-storage has something attached
-	unset DO_slowusb
-
-	local usb_storage_dir="/sys/bus/usb/drivers/usb-storage"
-	if [ ! -d "${usb_storage_dir}" ]
-	then
-		# no automated slowusb required. no usb-storage devices attached.
-		return
-	fi
-	for x in "${usb_storage_dir}"/*
-	do
-		[ -d "${x}" ]  && [ "${x}" != "${usb_storage_dir}/module" ] \
-			&& { DO_slowusb="1" ; break ; }
-	done
 }
 
 cmdline_hwopts() {
@@ -615,7 +626,7 @@ chooseKeymap() {
 		splash set_msg "Set keymap to ${keymap}"
 	elif [ -z "${keymap}" ]
 	then
-		echo
+		good_msg
 		good_msg "Keeping default keymap"
 		splash set_msg "Keeping default keymap"
 	else
@@ -623,6 +634,13 @@ chooseKeymap() {
 		unset keymap
 		chooseKeymap
 	fi
+}
+
+# This helper function is to be called using call_func_timeout.
+# This works around the inability of busybox modprobe to handle complex module dependencies.
+# This also enables us to wait a reasonable amount of time until /dev/zfs appears.
+waitForZFS() {
+	while [ ! -c /dev/zfs ]; do modprobe zfs 2> /dev/null; done;
 }
 
 startVolumes() {
@@ -703,7 +721,12 @@ startVolumes() {
 	
 	if [ "${USE_ZFS}" = '1' ]
 	then
-		if [ -z "${ZFS_POOL}" ]
+
+		# Avoid race involving asynchronous module loading
+		if call_func_timeout waitForZFS 5
+		then
+			bad_msg "Cannot import ZFS pool because /dev/zfs is missing"
+		elif [ -z "${ZFS_POOL}" ]
 		then
 			good_msg "Importing ZFS pools"
 
@@ -734,9 +757,9 @@ startVolumes() {
 
 				if [ "$?" = '0' ]
 				then
-					good_msg "Importing ${ZFS_POOL} succeeded"
+					good_msg "Import of ${ZFS_POOL} succeeded"
 				else
-					bad_msg "Importing ${ZFS_POOL} failed"
+					bad_msg "Import of ${ZFS_POOL} failed"
 				fi
 			fi
 		fi
@@ -988,19 +1011,13 @@ startLUKS() {
 
 sdelay() {
 	# Sleep a specific number of seconds if SDELAY is set
-	if [ "${SDELAY}" ]
+	if [ -n "${SDELAY}" ]
 	then
 		good_msg "Waiting ${SDELAY} seconds..."
 		sleep ${SDELAY}
 	elif [ "${CDROOT}" = '1' ]
 	then
-		# many CD/DVD drives require extra sleep, especially when
-		# connected via USB. Many people reported that 1 second sleep
-		# is not enough on their notebooks, that's why sleep 3, when booting
-		# off a livecd is a better default.
-		sleep 3
-	else
-		good_msg 'Hint: Use parameter scandelay[=seconds] if you need waiting here'
+		good_msg 'Hint: Use scandelay[=seconds] if your live medium is slowand boot fails'
 	fi
 }
 
@@ -1066,6 +1083,7 @@ rundebugshell() {
 	if [ -n "$DEBUG" ]
 	then
 		good_msg 'Starting debug shell as requested by "debug" option.'
+		good_msg "Stopping by: ${1}"
 		do_rundebugshell
 	fi
 }

@@ -50,21 +50,10 @@ KMINOR=`echo $KV | cut -f2 -d.`
 KVER="${KMAJOR}.${KMINOR}"
 MISCOPTS='debug detect'
 
-if [ "${KMAJOR}" -ge 3 ] || [ "${KMAJOR}" -eq 2 -a "${KMINOR}" -eq '6' ]
-then
-	KV_2_6_OR_GREATER="yes"
-fi
-
 QUIET='1'
 ROOT_LINKS='bin sbin lib lib32 lib64 boot usr opt emul'
 ROOT_TREES='etc root home var'
-INSMOD='insmod'
-if [ "${KMAJOR}" -ge 3 ] || [ "${KMAJOR}" -eq 2 -a "${KMINOR}" -gt '4' ]
-then
-	KSUFF='.ko'
-else
-	KSUFF='.o'
-fi
+KSUFF='.ko'
 
 REAL_ROOT=''
 CONSOLE='/dev/console'
@@ -83,5 +72,5 @@ DEFAULT_NFSOPTIONS="ro,nolock,rsize=1024,wsize=1024"
 
 # Only sections that are in by default or those that
 # are not module groups need to be defined here...
-HWOPTS='keymap cache modules pata sata scsi usb firewire waitscan slowusb lvm dmraid mdadm fs net'
-MY_HWOPTS='modules pata sata scsi slowusb usb firewire waitscan dmraid mdadm fs net iscsi crypto'
+HWOPTS='keymap cache modules pata sata scsi usb firewire waitscan lvm dmraid mdadm fs net'
+MY_HWOPTS='modules pata sata scsi usb firewire waitscan dmraid mdadm fs net iscsi crypto'

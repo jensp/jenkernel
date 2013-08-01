@@ -95,6 +95,9 @@ KERNEL CONFIGURATION
     Saves, or does not save the kernel configuration to '/etc/kernels'
     if the kernel is successfully compiled.
 
+*--virtio*::
+    Adds Virtio support to kernel configuration.
+
 *--*[*no-*]*gconfig*::
     Runs, or does not run "make gconfig" after "make oldconfig".
 
@@ -472,11 +475,6 @@ which the ramdisk scripts would recognize.
     Activate SCSI devices on bootup, necessary when SCSI support is
     compiled as modules and you're using SCSI or SATA devices.
 
-*noslowusb*::
-    By default genkernel pause for 10 seconds if it finds a attached
-    usb-storage device to give them time to initiate.
-    This option skips that pause.
-
 *keymap*='MAP'::
     Set keymap to 'MAP', e.g. *keymap*=de.
     For valid values of 'MAP' please see
@@ -497,6 +495,10 @@ which the ramdisk scripts would recognize.
 *subdir*=<...>::
     switch_root into "<CHROOT>/<SUBDIR>" instead of "<CHROOT>/".
     <CHROOT> is "/newroot" (or "/union") usually.
+
+*quiet*::
+    Do not print anything but error and warning messages during
+    the execution of the initramfs init scripts.
 
 *debug*::
     Drop into a debug shell early in the process.
@@ -545,9 +547,13 @@ which the ramdisk scripts would recognize.
 *aufs*::
     Enables support for AUFS2 (if available in the kernel).
 
-*real_rootflags*=<...>::
+*rootflags*=<...>::
     Additional flags to mount the real root system with.
-    For example *real_rootflags*=noatime would make "-o ro,noatime".
+    For example *rootflags*=noatime would make "-o ro,noatime".
+
+*real_rootflags*=<...>::
+    Legacy kernel parameter from kernel-2.4 initrd.
+    Does the same as *rootflags*=, which should be used in its place.
 
 *real_resume*=<...>::
 *resume*=<...>::
