@@ -10,12 +10,12 @@ call_func_timeout()
 	( ${func} ) & pid=$!
 	( sleep ${timeout} && kill -HUP ${pid} ) 2>/dev/null & watcher=$!
 	if wait ${pid} 2>/dev/null; then
-	    kill -HUP $watcher 2> /dev/null
-	    wait $watcher 2>/dev/null
-	    return 1
+		kill -HUP $watcher 2> /dev/null
+		wait $watcher 2>/dev/null
+		return 0
 	fi
 
-	return 0
+	return 1
 }
 
 modules_load() {
@@ -446,9 +446,11 @@ prompt_user(){
 
 	eval local oldvalue='$'${1}
 
-	[ $# != 2 -a $# != 3 ] && \
+	if [ $# != 2 -a $# != 3 ]; then
 		bad_msg "Bad invocation of function prompt_user."
-		bad_msg "Please file a bug report with this message" && exit 1
+		bad_msg "Please file a bug report with this message"
+		exit 1
+	fi
 	[ -n "${3}" ] && local explnt=" or : ${3}" || local explnt="."
 
 	bad_msg "Could not find the ${2} in ${oldvalue}${explnt}"
@@ -637,10 +639,10 @@ chooseKeymap() {
 }
 
 # This helper function is to be called using call_func_timeout.
-# This works around the inability of busybox modprobe to handle complex module dependencies.
-# This also enables us to wait a reasonable amount of time until /dev/zfs appears.
+# It enables us to wait a reasonable amount of time until /dev/zfs appears.
 waitForZFS() {
-	while [ ! -c /dev/zfs ]; do modprobe zfs 2> /dev/null; done;
+	while [ ! -c /dev/zfs ]; do echo >/dev/null; done;
+	exit 1
 }
 
 startVolumes() {

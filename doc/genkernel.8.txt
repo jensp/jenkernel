@@ -85,6 +85,9 @@ DEBUGGING OPTIONS
 *--*[*no-*]*color*::
     Turns on, or off, output in color using escape sequences.
 
+*--*[*no-*]*debug-cleanup*::
+    Turns on or off the full post-run cleanup for debug purposes.
+
 
 KERNEL CONFIGURATION
 ~~~~~~~~~~~~~~~~~~~~
@@ -382,10 +385,10 @@ OUTPUT SETTINGS
 	in your kernel configuration.
 
 
-RAMDISK OPTIONS
----------------
+RAMDISK/INITRAMFS OPTIONS
+-------------------------
 The following options can be passed as kernel parameters from the bootloader,
-which the ramdisk scripts would recognize.
+which the ramdisk & initramfs scripts would recognize.
 
 *root*=<...>::
     Specifies the device node of the root filesystem to mount.

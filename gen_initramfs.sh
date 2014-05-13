@@ -1,7 +1,8 @@
 #!/bin/bash
 # $Id$
 
-CPIO_ARGS="--quiet -o -H newc"
+COPY_BINARIES=false
+CPIO_ARGS="--quiet -o -H newc --owner root:root --force-local"
 
 # The copy_binaries function is explicitly released under the CC0 license to
 # encourage wide adoption and re-use.  That means:
@@ -23,6 +24,8 @@ CPIO_ARGS="--quiet -o -H newc"
 copy_binaries() {
 	local destdir=$1
 	shift
+
+	COPY_BINARIES=true
 
 	for binary in "$@"; do
 		[[ -e "${binary}" ]] \
@@ -86,15 +89,18 @@ append_base_layout() {
 	echo "proc          /proc       proc    defaults    0 0" >> ${TEMP}/initramfs-base-temp/etc/fstab
 
 	cd ${TEMP}/initramfs-base-temp/dev
-	mknod -m 660 console c 5 1
-	mknod -m 660 null c 1 3
-	mknod -m 660 zero c 1 5
-	mknod -m 600 tty0 c 4 0
-	mknod -m 600 tty1 c 4 1
-	mknod -m 600 ttyS0 c 4 64
+	# TODO: this will fail as non-root
+	mknod -m 660 console c 5 1 || gen_die "failed to mknod"
+	mknod -m 660 null c 1 3 || gen_die "failed to mknod"
+	mknod -m 660 zero c 1 5 || gen_die "failed to mknod"
+	mknod -m 600 tty0 c 4 0 || gen_die "failed to mknod"
+	mknod -m 600 tty1 c 4 1 || gen_die "failed to mknod"
+	mknod -m 600 ttyS0 c 4 64 || gen_die "failed to mknod"
 
 	date -u '+%Y%m%d-%H%M%S' > ${TEMP}/initramfs-base-temp/etc/build_date
 	echo "Genkernel $GK_V" > ${TEMP}/initramfs-base-temp/etc/build_id
+
+	printf "$(hostid | sed 's/\([0-9A-F]\{2\}\)/\\x\1/gI')" > ${TEMP}/initramfs-base-temp/etc/hostid
 
 	cd "${TEMP}/initramfs-base-temp/"
 	log_future_cpio_content
@@ -344,7 +350,7 @@ append_lvm(){
 		fi
 	else
 		print_info 1 '          LVM: Adding support (compiling binaries)...'
-		compile_lvm
+		compile_lvm || gen_die "Could not compile LVM"
 		/bin/tar -jxpf "${LVM_BINCACHE}" -C "${TEMP}/initramfs-lvm-temp" ||
 			gen_die "Could not extract lvm binary cache!";
 		mv ${TEMP}/initramfs-lvm-temp/sbin/lvm.static ${TEMP}/initramfs-lvm-temp/bin/lvm ||
@@ -391,7 +397,7 @@ append_mdadm(){
 				cp -a "${MDADM_CONFIG}" "${TEMP}/initramfs-mdadm-temp/etc/mdadm.conf" \
 				|| gen_die "Could not copy mdadm.conf!"
 			else
-				gen_die 'sl${MDADM_CONFIG} does not exist!'
+				gen_die "${MDADM_CONFIG} does not exist!"
 			fi
 		else
 			print_info 1 '		MDADM: Skipping inclusion of mdadm.conf'
@@ -446,6 +452,28 @@ append_zfs(){
 			|| gen_die "compressing zfs cpio"
 	cd "${TEMP}"
 	rm -rf "${TEMP}/initramfs-zfs-temp" > /dev/null
+}
+
+append_linker() {
+	if [ -d "${TEMP}/initramfs-linker-temp" ]
+	then
+		rm -r "${TEMP}/initramfs-linker-temp"
+	fi
+
+	mkdir -p "${TEMP}/initramfs-linker-temp/etc/ld.so.conf.d"
+
+	cp "/etc/ld.so."{cache,conf} "${TEMP}/initramfs-linker-temp/etc/" 2> /dev/null \
+		|| gen_die "Could not copy ld.so.{cache,conf}"
+
+	cp -r "/etc/ld.so.conf.d" "${TEMP}/initramfs-linker-temp/etc/" 2> /dev/null \
+		|| gen_die "Could not copy ld.so.conf.d"
+
+	cd "${TEMP}/initramfs-linker-temp/"
+	log_future_cpio_content
+	find . -print | cpio ${CPIO_ARGS} --append -F "${CPIO}" \
+			|| gen_die "compressing linker cpio"
+	cd "${TEMP}"
+	rm -rf "${TEMP}/initramfs-linker-temp" > /dev/null
 }
 
 append_splash(){
@@ -798,6 +826,11 @@ create_initramfs() {
 	if [ "${INITRAMFS_OVERLAY}" != '' ]
 	then
 		append_data 'overlay'
+	fi
+
+	if ${COPY_BINARIES}
+	then
+		append_data 'linker'
 	fi
 
 	# Finalize cpio by removing duplicate files

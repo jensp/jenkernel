@@ -124,7 +124,7 @@ determine_real_args() {
 	set_config_with_override BOOL   MDADM                CMD_MDADM
 	set_config_with_override STRING MDADM_CONFIG         CMD_MDADM_CONFIG
 	set_config_with_override BOOL   E2FSPROGS            CMD_E2FSPROGS            "no"
-	set_config_with_override BOOL   ZFS                  CMD_ZFS
+	set_config_with_override BOOL   ZFS                  CMD_ZFS                  "$(rootfs_type_is zfs)"
 	set_config_with_override BOOL   VIRTIO               CMD_VIRTIO				  "no"
 	set_config_with_override BOOL   MULTIPATH            CMD_MULTIPATH
 	set_config_with_override BOOL   FIRMWARE             CMD_FIRMWARE
@@ -136,6 +136,7 @@ determine_real_args() {
 	set_config_with_override BOOL   DOKEYMAPAUTO         CMD_DOKEYMAPAUTO
 	set_config_with_override STRING BUSYBOX_CONFIG       CMD_BUSYBOX_CONFIG
 	set_config_with_override BOOL   INSTALL              CMD_INSTALL              "yes"
+	set_config_with_override BOOL   DEBUGCLEANUP         CMD_DEBUGCLEANUP         "yes"
 
 	BOOTDIR=`arch_replace "${BOOTDIR}"`
 	BOOTDIR=${BOOTDIR%/}    # Remove any trailing slash

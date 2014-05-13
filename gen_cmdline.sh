@@ -22,6 +22,8 @@ longusage() {
   echo "	--logfile=<outfile>	Output file for debug info"
   echo "	--color			Output debug in color"
   echo "	--no-color		Do not output debug in color"
+  echo "	--debug-cleanup	Clean up temporary build directories on exit"
+  echo "	--no-debug-cleanup	Do not remove any temporary directories on exit"
   echo "  Kernel Configuration settings"
   echo "	--menuconfig		Run menuconfig after oldconfig"
   echo "	--no-menuconfig		Do not run menuconfig after oldconfig"
@@ -161,6 +163,9 @@ longusage() {
   echo "				Compress or do not compress the generated initramfs"
   echo "	--compress-initramfs-type=<arg>"
   echo "				Compression type for initramfs (best, xz, lzma, bzip2, gzip, lzop)"
+  echo
+  echo "For a detailed list of supported initramfs options and flags; issue:"
+  echo "	man 8 genkernel"
 }
 
 usage() {
@@ -175,8 +180,10 @@ usage() {
   echo '	--no-mrproper		Do not run make mrproper before compilation,'
   echo '				this is implied by --no-clean.'
   echo
-  echo 'For a detailed list of supported options and flags; issue:'
+  echo 'For a detailed list of supported commandline options and flags; issue:'
   echo '	genkernel --help'
+  echo 'For a detailed list of supported initramfs options and flags; issue:'
+  echo '	man 8 genkernel'
 }
 
 parse_optbool() {
@@ -465,6 +472,10 @@ parse_cmdline() {
 			USECOLOR=`parse_optbool "$*"`
 			print_info 2 "USECOLOR: ${USECOLOR}"
 			setColorVars
+			;;
+		--debug-cleanup|--no-debug-cleanup)
+			CMD_DEBUGCLEANUP=`parse_optbool "$*"`
+			print_info 2 "DEBUGCLEANUP: ${DEBUGCLEANUP}"
 			;;
 		--logfile=*)
 			CMD_LOGFILE=`parse_opt "$*"`

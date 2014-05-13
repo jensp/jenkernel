@@ -342,6 +342,10 @@ compile_kernel() {
 	then
 		gen_die "Cannot locate kernel binary"
 	fi
+	# if source != outputdir, we need this:
+	tmp_kernel_binary="${KERNEL_OUTPUTDIR}"/"${tmp_kernel_binary}"
+	tmp_kernel_binary2="${KERNEL_OUTPUTDIR}"/"${tmp_kernel_binary2}"
+	systemmap="${KERNEL_OUTPUTDIR}"/System.map
 
 	if isTrue "${CMD_INSTALL}"
 	then
@@ -350,7 +354,7 @@ compile_kernel() {
 			"kernel-${KNAME}-${ARCH}-${KV}"
 
 		copy_image_with_preserve "System.map" \
-			"System.map" \
+			"${systemmap}" \
 			"System.map-${KNAME}-${ARCH}-${KV}"
 
 		if isTrue "${GENZIMAGE}"
@@ -362,7 +366,7 @@ compile_kernel() {
 	else
 		cp "${tmp_kernel_binary}" "${TMPDIR}/kernel-${KNAME}-${ARCH}-${KV}" ||
 			gen_die "Could not copy the kernel binary to ${TMPDIR}!"
-		cp "System.map" "${TMPDIR}/System.map-${KNAME}-${ARCH}-${KV}" ||
+		cp "${systemmap}" "${TMPDIR}/System.map-${KNAME}-${ARCH}-${KV}" ||
 			gen_die "Could not copy System.map to ${TMPDIR}!"
 		if isTrue "${GENZIMAGE}"
 		then
@@ -426,7 +430,7 @@ compile_busybox() {
 		yes '' 2>/dev/null | compile_generic oldconfig utils
 
 		print_info 1 'busybox: >> Compiling...'
-		compile_generic all utils
+		compile_generic all utils V=1
 		print_info 1 'busybox: >> Copying to cache...'
 		[ -f "${TEMP}/${BUSYBOX_DIR}/busybox" ] ||
 			gen_die 'Busybox executable does not exist!'
@@ -436,7 +440,8 @@ compile_busybox() {
 			gen_die 'Could not create the busybox bincache!'
 
 		cd "${TEMP}"
-		rm -rf "${BUSYBOX_DIR}" > /dev/null
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${BUSYBOX_DIR}" > /dev/null
+		return 0
 	fi
 }
 
@@ -464,8 +469,11 @@ compile_lvm() {
 				>> ${LOGFILE} 2>&1 || \
 				gen_die 'Configure of lvm failed!'
 		print_info 1 'lvm: >> Compiling...'
-		compile_generic '' utils
-		compile_generic "install DESTDIR=${TEMP}/lvm/" utils
+		compile_generic '' utils || gen_die "failed to build LVM"
+		mkdir -p "${TEMP}/lvm/sbin"
+		compile_generic "install DESTDIR=${TEMP}/lvm/" utils || gen_die "failed to install LVM"
+		# Upstream does u-w on files, and this breaks stuff.
+		chmod -R u+w "${TEMP}/lvm/"
 
 		cd "${TEMP}/lvm"
 		print_info 1 '      >> Copying to bincache...'
@@ -478,8 +486,9 @@ compile_lvm() {
 			gen_die 'Could not create binary cache'
 
 		cd "${TEMP}"
-		rm -rf "${TEMP}/lvm" > /dev/null
-		rm -rf "${LVM_DIR}" lvm
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${TEMP}/lvm" > /dev/null
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${LVM_DIR}" lvm
+		return 0
 	fi
 }
 
@@ -518,7 +527,8 @@ compile_mdadm() {
 			gen_die 'Could not create binary cache'
 
 		cd "${TEMP}"
-		rm -rf "${MDADM_DIR}" mdadm
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${MDADM_DIR}" mdadm
+		return 0
 	fi
 }
 
@@ -567,8 +577,9 @@ compile_dmraid() {
 			gen_die 'Could not create binary cache'
 
 		cd "${TEMP}"
-		rm -rf "${TEMP}/lvm" > /dev/null
-		rm -rf "${DMRAID_DIR}" dmraid
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${TEMP}/lvm" > /dev/null
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${DMRAID_DIR}" dmraid
+		return 0
 	fi
 }
 
@@ -605,7 +616,8 @@ compile_fuse() {
 #			gen_die 'Could not create fuse bincache!'
 
 		cd "${TEMP}"
-#		rm -rf "${FUSE_DIR}" > /dev/null
+#		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${FUSE_DIR}" > /dev/null
+		return 0
 	fi
 }
 
@@ -640,7 +652,8 @@ compile_unionfs_fuse() {
 			gen_die 'Could not copy the unionfs binary to the package directory, does the directory exist?'
 
 		cd "${TEMP}"
-		rm -rf "${UNIONFS_FUSE_DIR}" > /dev/null
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${UNIONFS_FUSE_DIR}" > /dev/null
+		return 0
 	fi
 }
 
@@ -690,7 +703,8 @@ compile_iscsi() {
 			gen_die 'Could not copy the iscsistart binary to the package directory, does the directory exist?'
 
 		cd "${TEMP}"
-		rm -rf "${ISCSI_DIR}" > /dev/null
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${ISCSI_DIR}" > /dev/null
+		return 0
 	fi
 }
 
@@ -735,6 +749,7 @@ compile_gpg() {
 			gen_die 'Could not copy the gpg binary to the package directory, does the directory exist?'
 
 		cd "${TEMP}"
-		rm -rf "${GPG_DIR}" > /dev/null
+		isTrue "${CMD_DEBUGCLEANUP}" && rm -rf "${GPG_DIR}" > /dev/null
+		return 0
 	fi
 }
